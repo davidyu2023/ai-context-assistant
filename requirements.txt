@@ -1,0 +1,9 @@
+# Python standard library modules used (no external dependencies required)
+# - tkinter (included with Python on Windows)
+# - json
+# - datetime
+# - pathlib
+# - os
+
+# Optional: For creating standalone executable
+pyinstaller>=5.0
