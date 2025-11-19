@@ -1,5 +1,5 @@
-# Application config
-config.json
+# Application config (but not test data)
+/config.json
 
 # Python
 __pycache__/
@@ -43,6 +43,7 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Output files (examples)
-*.txt
+# Output files (but not test data)
+/*.txt
 !requirements.txt
+!test_data/**/*.txt

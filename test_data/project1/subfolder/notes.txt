@@ -1,0 +1,2 @@
+Notes for subfolder
+This file is in a subfolder and will only be included if subfolders are not excluded.
