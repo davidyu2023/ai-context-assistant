@@ -13,7 +13,7 @@ A cross-platform GUI application for combining multiple text files into a single
 - **Timestamped Output**: Automatically adds timestamps to output filenames
 - **Clear File Markers**: Each source file is clearly marked with begin/end delimiters in the output
 
-### Phase 1 Features (NEW!)
+### Phase 1 Features
 
 #### 🎯 Token Counting & Cost Estimation
 - **Real-time Token Counting**: Uses `tiktoken` for accurate token counting compatible with GPT-4, GPT-3.5-turbo, and Claude models
@@ -37,6 +37,38 @@ A cross-platform GUI application for combining multiple text files into a single
 - **Copy to Clipboard**: One-click copy of merged content directly to clipboard
 - **Toast Notifications**: Shows token count and cost when copying
 - **No Intermediate Files**: Skip file generation and paste directly into AI chat
+
+### Phase 2 Features (NEW!)
+
+#### 🎨 Project Profiles & Workspaces
+- **Save/Load Profiles**: Save complete configurations including folders, settings, and prompts
+- **Quick Context Switching**: Switch between different projects instantly
+- **Profile Management**: Create, load, and delete custom profiles
+- **Persistent Workspaces**: Each profile remembers all settings and source folders
+
+#### 🔧 Skeleton Mode (Code Structure Extraction)
+- **91.9% Token Reduction**: Extract only class/function signatures from Python files
+- **Smart AST Parsing**: Uses Python's AST module for accurate code analysis
+- **Preserves Documentation**: Keeps docstrings while removing implementation details
+- **Automatic Fallback**: Falls back to full content if extraction fails
+- **Perfect for Architecture Review**: Ideal for understanding code structure without implementation noise
+
+#### 📊 Enhanced Metadata & Visualization
+- **Directory Tree**: Auto-generated tree structure showing project organization
+- **File Statistics**: Comprehensive metadata including file count, timestamps, and settings
+- **Visual Organization**: Clear hierarchy display for better context understanding
+
+#### 📝 System Prompt Templates
+- **Reusable Instructions**: Save and load custom system prompts
+- **Built-in Templates**: Pre-configured templates for Code Review, Documentation, and Refactoring
+- **Quick Loading**: Select template from dropdown to instantly populate prompt
+- **Custom Templates**: Create your own prompt templates for specific workflows
+
+#### 🎯 Model-Specific Output Formats
+- **Standard Format**: Classic delimiter-based format with enhanced metadata
+- **XML Format**: Optimized for Claude models with structured `<document>` tags
+- **Markdown Format**: Optimized for GPT models with syntax-highlighted code blocks
+- **Automatic Language Detection**: Smart syntax highlighting based on file extensions
 
 ## Requirements
 
@@ -113,6 +145,104 @@ python text_file_merger.py
 3. Content is copied directly to clipboard with token count and cost displayed
 4. Paste directly into ChatGPT, Claude, or any AI chat interface
 
+### Phase 2 Features Usage
+
+#### Project Profiles & Workspaces
+1. Configure your folders, settings, and system prompt for a specific project
+2. Click **"Save As..."** in the Profile section
+3. Enter a profile name (e.g., "Backend API", "Frontend UI", "Documentation")
+4. To load a saved profile:
+   - Select it from the Profile dropdown
+   - Click **"Load"**
+5. All settings, folders, and prompts are restored instantly!
+
+#### Skeleton Mode
+1. Check **"Skeleton Mode (signatures only)"** in Phase 2 Features
+2. This applies **only to Python (.py) files**
+3. Generates output files for other types
+4. Achieves ~92% token reduction while preserving structure
+5. Perfect for:
+   - Understanding code architecture
+   - Reviewing class hierarchies
+   - Analyzing API surfaces
+   - Planning refactoring
+
+**Example Output:**
+```python
+class Config:
+    """Handles persistent configuration storage"""
+    def __init__(self, config_file: str):
+        ...
+
+    def load(self) -> dict:
+        """Load configuration from file"""
+        ...
+```
+
+#### Directory Tree Visualization
+1. Check **"Show Directory Tree"** (enabled by default)
+2. A visual tree structure is automatically included in the output header
+3. Shows the organization of all included files
+4. Example:
+```
+ai-context-assistant/
+├── src/
+│   ├── utils/
+│   │   └── helper.py
+│   └── main.py
+└── tests/
+    └── test_main.py
+```
+
+#### System Prompt Templates
+1. Use the **Template** dropdown to select a pre-configured prompt:
+   - **Code Review**: For reviewing code quality and best practices
+   - **Documentation**: For generating comprehensive documentation
+   - **Refactoring**: For analyzing and improving code structure
+2. The template text is loaded into the System Prompt area
+3. Edit as needed or write your own custom prompt
+4. The system prompt is prepended to all generated output
+
+#### Output Formats
+1. Select format from **Output Format** dropdown:
+   - **standard**: Classic format with clear delimiters (default)
+   - **xml**: Optimized for Claude models with XML structure
+   - **markdown**: Optimized for GPT models with Markdown formatting
+
+2. **XML Format** (Best for Claude):
+```xml
+<?xml version='1.0' encoding='UTF-8'?>
+<context>
+  <metadata>
+    <generated_by>AI Context Assistant</generated_by>
+    <timestamp>2025-11-23 14:30:00</timestamp>
+  </metadata>
+  <documents>
+    <document index='1'>
+      <source>project/file.py</source>
+      <document_content>...</document_content>
+    </document>
+  </documents>
+</context>
+```
+
+3. **Markdown Format** (Best for GPT):
+```markdown
+# AI Context
+
+## Metadata
+- **Generated By**: AI Context Assistant
+- **Timestamp**: 2025-11-23 14:30:00
+
+## Files
+
+### File: `project/file.py`
+
+\```python
+# code here
+\```
+```
+
 ## Output Format
 
 Each output file contains metadata and all text files from the source folder with clear delimiters:
@@ -153,6 +283,15 @@ Settings are automatically saved to `config.json` in the application directory a
 - `token_hard_limit`: Maximum token limit (default: `128000`)
 - `respect_gitignore`: Use .gitignore/.gptignore patterns (default: `true`)
 
+### Phase 2 Settings
+- `enable_skeleton_mode`: Extract only class/function signatures from Python files (default: `false`)
+- `output_format`: Output format - "standard", "xml", or "markdown" (default: `"standard"`)
+- `show_directory_tree`: Include directory tree visualization (default: `true`)
+- `system_prompt`: Custom system prompt/instructions (default: `""`)
+- `current_profile`: Currently active profile (default: `"Default"`)
+- `profiles`: Dictionary of saved project profiles
+- `prompt_templates`: Dictionary of reusable system prompt templates
+
 ### Example config.json
 ```json
 {
@@ -163,7 +302,24 @@ Settings are automatically saved to `config.json` in the application directory a
   "target_model": "gpt-4o",
   "token_soft_limit": 32000,
   "token_hard_limit": 128000,
-  "respect_gitignore": true
+  "respect_gitignore": true,
+  "enable_skeleton_mode": false,
+  "output_format": "standard",
+  "show_directory_tree": true,
+  "system_prompt": "You are a senior software engineer...",
+  "current_profile": "Backend API",
+  "profiles": {
+    "Backend API": {
+      "output_folder": "/projects/backend/context",
+      "source_folders": [...],
+      "system_prompt": "Review this backend API code..."
+    },
+    "Frontend UI": {
+      "output_folder": "/projects/frontend/context",
+      "source_folders": [...],
+      "system_prompt": "Analyze this React application..."
+    }
+  }
 }
 ```
 

@@ -9,6 +9,13 @@ Phase 1 Features:
 - .gptignore/.gitignore support
 - PII sanitization
 - Copy to clipboard
+
+Phase 2 Features:
+- Project Profiles/Workspaces
+- Skeleton Mode (code structure extraction)
+- Directory tree visualization
+- System Prompt Templates
+- Model-specific output formats (XML/Markdown)
 """
 
 import tkinter as tk
@@ -16,6 +23,7 @@ from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import json
 import re
+import ast
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -179,6 +187,251 @@ def estimate_cost(token_count: int, model: str = "gpt-4o") -> Tuple[float, str]:
     return cost, model
 
 
+# ============================================================================
+# Phase 2 Utility Functions
+# ============================================================================
+
+def extract_skeleton(file_path: Path) -> Optional[str]:
+    """
+    Extract code skeleton (class/function signatures only) from Python files.
+
+    Args:
+        file_path: Path to the Python file
+
+    Returns:
+        Skeleton code string or None if extraction fails
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            source_code = f.read()
+
+        tree = ast.parse(source_code)
+        skeleton_lines = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                # Extract class definition
+                class_line = f"class {node.name}"
+                if node.bases:
+                    bases = ', '.join(ast.unparse(base) for base in node.bases)
+                    class_line += f"({bases})"
+                class_line += ":"
+                skeleton_lines.append(class_line)
+
+                # Extract docstring if present
+                if (ast.get_docstring(node)):
+                    docstring = ast.get_docstring(node)
+                    skeleton_lines.append(f'    """{docstring}"""')
+
+                # Extract methods
+                for item in node.body:
+                    if isinstance(item, ast.FunctionDef):
+                        # Build function signature
+                        args = []
+                        for arg in item.args.args:
+                            arg_str = arg.arg
+                            if arg.annotation:
+                                arg_str += f": {ast.unparse(arg.annotation)}"
+                            args.append(arg_str)
+
+                        func_sig = f"    def {item.name}({', '.join(args)})"
+                        if item.returns:
+                            func_sig += f" -> {ast.unparse(item.returns)}"
+                        func_sig += ":"
+                        skeleton_lines.append(func_sig)
+
+                        # Add docstring if present
+                        if ast.get_docstring(item):
+                            docstring = ast.get_docstring(item)
+                            skeleton_lines.append(f'        """{docstring}"""')
+
+                        skeleton_lines.append("        ...")
+                        skeleton_lines.append("")
+
+                skeleton_lines.append("")
+
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.col_offset == 0:
+                # Top-level function
+                args = []
+                for arg in node.args.args:
+                    arg_str = arg.arg
+                    if arg.annotation:
+                        arg_str += f": {ast.unparse(arg.annotation)}"
+                    args.append(arg_str)
+
+                func_sig = f"def {node.name}({', '.join(args)})"
+                if node.returns:
+                    func_sig += f" -> {ast.unparse(node.returns)}"
+                func_sig += ":"
+                skeleton_lines.append(func_sig)
+
+                if ast.get_docstring(node):
+                    docstring = ast.get_docstring(node)
+                    skeleton_lines.append(f'    """{docstring}"""')
+
+                skeleton_lines.append("    ...")
+                skeleton_lines.append("")
+
+        return '\n'.join(skeleton_lines) if skeleton_lines else None
+
+    except Exception as e:
+        # If AST parsing fails, return None (not a valid Python file or syntax error)
+        return None
+
+
+def generate_directory_tree(folder_path: Path, files: List[Path], prefix: str = "") -> str:
+    """
+    Generate a text-based directory tree visualization.
+
+    Args:
+        folder_path: Root folder path
+        files: List of files to include in tree
+        prefix: Prefix for tree formatting (used in recursion)
+
+    Returns:
+        Tree structure as string
+    """
+    tree_lines = []
+
+    # Build a nested structure
+    structure = {}
+    for file in files:
+        try:
+            relative = file.relative_to(folder_path)
+            parts = relative.parts
+
+            current = structure
+            for i, part in enumerate(parts):
+                if i == len(parts) - 1:  # File
+                    if 'files' not in current:
+                        current['files'] = []
+                    current['files'].append(part)
+                else:  # Directory
+                    if 'dirs' not in current:
+                        current['dirs'] = {}
+                    if part not in current['dirs']:
+                        current['dirs'][part] = {}
+                    current = current['dirs'][part]
+        except ValueError:
+            continue
+
+    # Generate tree representation
+    def build_tree(node: Dict, prefix: str = "", is_last: bool = True) -> List[str]:
+        lines = []
+
+        # Add directories
+        if 'dirs' in node:
+            dirs = sorted(node['dirs'].items())
+            for i, (dir_name, sub_node) in enumerate(dirs):
+                is_last_dir = (i == len(dirs) - 1) and 'files' not in node
+                connector = "└── " if is_last_dir else "├── "
+                lines.append(f"{prefix}{connector}{dir_name}/")
+
+                extension = "    " if is_last_dir else "│   "
+                lines.extend(build_tree(sub_node, prefix + extension, is_last_dir))
+
+        # Add files
+        if 'files' in node:
+            files = sorted(node['files'])
+            for i, file_name in enumerate(files):
+                is_last_file = i == len(files) - 1
+                connector = "└── " if is_last_file else "├── "
+                lines.append(f"{prefix}{connector}{file_name}")
+
+        return lines
+
+    tree_lines.append(f"{folder_path.name}/")
+    tree_lines.extend(build_tree(structure))
+
+    return '\n'.join(tree_lines)
+
+
+def format_as_xml(files_data: List[Dict[str, str]], metadata: Dict) -> str:
+    """
+    Format merged files as XML (optimized for Claude).
+
+    Args:
+        files_data: List of dicts with 'path' and 'content' keys
+        metadata: Metadata dictionary
+
+    Returns:
+        XML-formatted string
+    """
+    lines = ["<?xml version='1.0' encoding='UTF-8'?>"]
+    lines.append("<context>")
+
+    # Metadata section
+    lines.append("  <metadata>")
+    for key, value in metadata.items():
+        lines.append(f"    <{key}>{value}</{key}>")
+    lines.append("  </metadata>")
+
+    # Documents section
+    lines.append("  <documents>")
+    for i, file_data in enumerate(files_data, 1):
+        lines.append(f"    <document index='{i}'>")
+        lines.append(f"      <source>{file_data['path']}</source>")
+        lines.append(f"      <document_content>")
+        # Escape XML special characters
+        content = file_data['content'].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        lines.append(f"{content}")
+        lines.append(f"      </document_content>")
+        lines.append(f"    </document>")
+    lines.append("  </documents>")
+
+    lines.append("</context>")
+    return '\n'.join(lines)
+
+
+def format_as_markdown(files_data: List[Dict[str, str]], metadata: Dict) -> str:
+    """
+    Format merged files as Markdown (optimized for GPT).
+
+    Args:
+        files_data: List of dicts with 'path' and 'content' keys
+        metadata: Metadata dictionary
+
+    Returns:
+        Markdown-formatted string
+    """
+    lines = ["# AI Context"]
+    lines.append("")
+
+    # Metadata section
+    lines.append("## Metadata")
+    for key, value in metadata.items():
+        lines.append(f"- **{key.replace('_', ' ').title()}**: {value}")
+    lines.append("")
+
+    # Files section
+    lines.append("## Files")
+    lines.append("")
+
+    for file_data in files_data:
+        lines.append(f"### File: `{file_data['path']}`")
+        lines.append("")
+
+        # Determine language for syntax highlighting
+        path = Path(file_data['path'])
+        ext_to_lang = {
+            '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+            '.java': 'java', '.cpp': 'cpp', '.c': 'c', '.cs': 'csharp',
+            '.go': 'go', '.rs': 'rust', '.rb': 'ruby', '.php': 'php',
+            '.swift': 'swift', '.kt': 'kotlin', '.scala': 'scala',
+            '.sh': 'bash', '.sql': 'sql', '.json': 'json', '.xml': 'xml',
+            '.yaml': 'yaml', '.yml': 'yaml', '.md': 'markdown', '.html': 'html',
+            '.css': 'css', '.scss': 'scss'
+        }
+        lang = ext_to_lang.get(path.suffix.lower(), '')
+
+        lines.append(f"```{lang}")
+        lines.append(file_data['content'])
+        lines.append("```")
+        lines.append("")
+
+    return '\n'.join(lines)
+
+
 class Config:
     """Handles persistent configuration storage"""
 
@@ -220,6 +473,18 @@ class Config:
             "token_soft_limit": 32000,
             "token_hard_limit": 128000,
             "respect_gitignore": True,
+            # Phase 2 settings
+            "enable_skeleton_mode": False,
+            "output_format": "standard",  # standard, xml, markdown
+            "show_directory_tree": True,
+            "system_prompt": "",
+            "current_profile": "Default",
+            "profiles": {},
+            "prompt_templates": {
+                "Code Review": "You are a senior software engineer. Review this code for:\n- Code quality and best practices\n- Potential bugs\n- Performance issues\n- Security vulnerabilities",
+                "Documentation": "You are a technical writer. Generate comprehensive documentation for this codebase including:\n- Overview\n- Architecture\n- API documentation\n- Usage examples",
+                "Refactoring": "You are an expert in code refactoring. Analyze this code and suggest improvements for:\n- Code structure\n- Design patterns\n- Maintainability\n- Testability"
+            }
         }
 
     def get(self, key: str, default=None):
@@ -230,6 +495,28 @@ class Config:
         """Set configuration value and save"""
         self.data[key] = value
         self.save()
+
+    # Phase 2: Profile Management Methods
+    def save_profile(self, profile_name: str, profile_data: Dict):
+        """Save a profile configuration"""
+        if 'profiles' not in self.data:
+            self.data['profiles'] = {}
+        self.data['profiles'][profile_name] = profile_data
+        self.save()
+
+    def load_profile(self, profile_name: str) -> Optional[Dict]:
+        """Load a profile configuration"""
+        return self.data.get('profiles', {}).get(profile_name)
+
+    def delete_profile(self, profile_name: str):
+        """Delete a profile"""
+        if 'profiles' in self.data and profile_name in self.data['profiles']:
+            del self.data['profiles'][profile_name]
+            self.save()
+
+    def get_profile_names(self) -> List[str]:
+        """Get list of all profile names"""
+        return list(self.data.get('profiles', {}).keys())
 
 
 class FolderEntry:
@@ -430,6 +717,72 @@ class TextFileMergerApp:
         self.token_info_label = ttk.Label(budget_frame, text="0 tokens ($0.00)")
         self.token_info_label.pack(side=tk.LEFT, padx=5)
 
+        # Phase 2 Features Section
+        phase2_frame = ttk.LabelFrame(main_container, text="Phase 2 Features", padding="10")
+        phase2_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Row 1: Skeleton mode and output format
+        p2_row1_frame = ttk.Frame(phase2_frame)
+        p2_row1_frame.pack(fill=tk.X, pady=(0, 5))
+
+        self.enable_skeleton = tk.BooleanVar(value=self.config.get("enable_skeleton_mode", False))
+        ttk.Checkbutton(p2_row1_frame, text="Skeleton Mode (signatures only)",
+                       variable=self.enable_skeleton).pack(side=tk.LEFT)
+
+        self.show_dir_tree = tk.BooleanVar(value=self.config.get("show_directory_tree", True))
+        ttk.Checkbutton(p2_row1_frame, text="Show Directory Tree",
+                       variable=self.show_dir_tree).pack(side=tk.LEFT, padx=15)
+
+        ttk.Label(p2_row1_frame, text="Output Format:").pack(side=tk.LEFT, padx=(15, 0))
+        self.output_format = tk.StringVar(value=self.config.get("output_format", "standard"))
+        format_combo = ttk.Combobox(p2_row1_frame, textvariable=self.output_format,
+                                    values=["standard", "xml", "markdown"],
+                                    state='readonly', width=12)
+        format_combo.pack(side=tk.LEFT, padx=5)
+
+        # Row 2: Profile management
+        p2_row2_frame = ttk.Frame(phase2_frame)
+        p2_row2_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(p2_row2_frame, text="Profile:").pack(side=tk.LEFT)
+
+        # Profile dropdown
+        self.current_profile = tk.StringVar(value=self.config.get("current_profile", "Default"))
+        self.profile_combo = ttk.Combobox(p2_row2_frame, textvariable=self.current_profile,
+                                         state='readonly', width=20)
+        self.profile_combo.pack(side=tk.LEFT, padx=5)
+        self.update_profile_list()
+
+        ttk.Button(p2_row2_frame, text="Load", command=self.load_profile_action,
+                  width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(p2_row2_frame, text="Save As...", command=self.save_profile_action,
+                  width=10).pack(side=tk.LEFT, padx=2)
+        ttk.Button(p2_row2_frame, text="Delete", command=self.delete_profile_action,
+                  width=8).pack(side=tk.LEFT, padx=2)
+
+        # Row 3: System Prompt
+        p2_row3_frame = ttk.Frame(phase2_frame)
+        p2_row3_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+
+        prompt_label_frame = ttk.Frame(p2_row3_frame)
+        prompt_label_frame.pack(fill=tk.X)
+
+        ttk.Label(prompt_label_frame, text="System Prompt (optional):").pack(side=tk.LEFT)
+        ttk.Label(prompt_label_frame, text="Template:").pack(side=tk.LEFT, padx=(15, 0))
+
+        # Template dropdown
+        self.prompt_template = tk.StringVar(value="None")
+        template_names = ["None"] + list(self.config.get("prompt_templates", {}).keys())
+        self.template_combo = ttk.Combobox(prompt_label_frame, textvariable=self.prompt_template,
+                                          values=template_names, state='readonly', width=15)
+        self.template_combo.pack(side=tk.LEFT, padx=5)
+        self.template_combo.bind('<<ComboboxSelected>>', self.load_template)
+
+        # System prompt text area
+        self.system_prompt = scrolledtext.ScrolledText(p2_row3_frame, height=3, wrap=tk.WORD)
+        self.system_prompt.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        self.system_prompt.insert('1.0', self.config.get("system_prompt", ""))
+
         # Source Folders Section
         folders_container = ttk.LabelFrame(main_container, text="Source Folders",
                                           padding="10")
@@ -515,6 +868,12 @@ class TextFileMergerApp:
             self.config.set("token_hard_limit", int(self.token_hard_limit.get()))
         except ValueError:
             self.log("Warning: Invalid token limit values, using defaults")
+
+        # Save Phase 2 settings
+        self.config.set("enable_skeleton_mode", self.enable_skeleton.get())
+        self.config.set("output_format", self.output_format.get())
+        self.config.set("show_directory_tree", self.show_dir_tree.get())
+        self.config.set("system_prompt", self.system_prompt.get('1.0', 'end-1c'))
 
         self.save_source_folders()
         self.log("Settings saved successfully")
@@ -694,7 +1053,8 @@ class TextFileMergerApp:
 
     def merge_files(self, files: List[Path], output_path: str, source_folder: str) -> Tuple[bool, str, int, List[str]]:
         """
-        Merge multiple files into one with delimiters, PII sanitization, and token counting.
+        Merge multiple files with Phase 1 & 2 features: PII sanitization, token counting,
+        skeleton mode, directory tree, system prompts, and output formats.
 
         Returns:
             Tuple of (success, merged_content, token_count, pii_redactions)
@@ -703,57 +1063,78 @@ class TextFileMergerApp:
             source_path = Path(source_folder)
             top_folder = source_path.name
             all_redactions = []
-            merged_content = ""
+            skeleton_mode = self.enable_skeleton.get()
+            output_format = self.output_format.get()
 
-            # Build header
-            header = f"Generated by AI Context Assistant\n"
-            header += f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-            header += f"Total files: {len(files)}\n"
-            header += f"Target Model: {self.target_model.get()}\n"
+            # Prepare metadata
+            metadata = {
+                "generated_by": "AI Context Assistant",
+                "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "total_files": len(files),
+                "target_model": self.target_model.get(),
+                "output_format": output_format
+            }
+
             if self.enable_pii.get():
-                header += "PII Sanitization: ENABLED\n"
-            header += "\n" + "="*80 + "\n\n"
+                metadata["pii_sanitization"] = "ENABLED"
 
-            merged_content = header
+            if skeleton_mode:
+                metadata["skeleton_mode"] = "ENABLED (signatures only)"
+
+            # Process files
+            files_data = []
 
             for file_path in files:
                 try:
-                    # Calculate relative path from source folder
+                    # Calculate relative path
                     try:
                         relative_path = file_path.relative_to(source_path)
                         display_path = f"{top_folder}/{relative_path}"
                     except ValueError:
                         display_path = f"{top_folder}/{file_path.name}"
 
-                    # Read file content
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
-                        content = infile.read()
+                    # Read or extract skeleton
+                    if skeleton_mode and file_path.suffix.lower() == '.py':
+                        content = extract_skeleton(file_path)
+                        if content is None:
+                            # Fall back to full content if extraction fails
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
+                                content = infile.read()
+                    else:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
+                            content = infile.read()
 
-                    # Apply PII sanitization if enabled
+                    # Apply PII sanitization
                     if self.enable_pii.get():
                         custom_names = self.config.get("custom_sanitize_names", ["davidyu", "david yu"])
                         content, redactions = sanitize_pii(content, custom_names)
                         if redactions:
                             all_redactions.extend([f"{display_path}: {r}" for r in redactions])
 
-                    # Write file header
-                    merged_content += "="*80 + "\n"
-                    merged_content += f"BEGIN FILE: {display_path}\n"
-                    merged_content += "="*80 + "\n"
-                    merged_content += content
-
-                    # Ensure file ends with newline
-                    if content and not content.endswith('\n'):
-                        merged_content += '\n'
-
-                    # Write file footer
-                    merged_content += "="*80 + "\n"
-                    merged_content += f"END FILE: {display_path}\n"
-                    merged_content += "="*80 + "\n\n"
+                    files_data.append({"path": display_path, "content": content})
 
                 except Exception as e:
                     self.log(f"Error reading {file_path}: {e}")
                     continue
+
+            # Generate output based on format
+            if output_format == "xml":
+                merged_content = format_as_xml(files_data, metadata)
+            elif output_format == "markdown":
+                merged_content = format_as_markdown(files_data, metadata)
+            else:
+                # Standard format
+                merged_content = self._format_standard(files_data, metadata, source_path, files)
+
+            # Prepend system prompt if provided
+            system_prompt = self.system_prompt.get('1.0', 'end-1c').strip()
+            if system_prompt:
+                if output_format == "xml":
+                    merged_content = f"<!-- System Instructions -->\n{system_prompt}\n\n{merged_content}"
+                elif output_format == "markdown":
+                    merged_content = f"## System Instructions\n\n{system_prompt}\n\n{merged_content}"
+                else:
+                    merged_content = f"SYSTEM INSTRUCTIONS:\n{system_prompt}\n\n{'='*80}\n\n{merged_content}"
 
             # Count tokens
             token_count = count_tokens(merged_content, self.target_model.get())
@@ -767,6 +1148,52 @@ class TextFileMergerApp:
         except Exception as e:
             self.log(f"Error writing output file: {e}")
             return False, "", 0, []
+
+    def _format_standard(self, files_data: List[Dict[str, str]], metadata: Dict,
+                        source_path: Path, files: List[Path]) -> str:
+        """Format output in standard format with Phase 2 enhancements"""
+        lines = []
+
+        # Header
+        lines.append("Generated by AI Context Assistant")
+        lines.append(f"Timestamp: {metadata['timestamp']}")
+        lines.append(f"Total files: {metadata['total_files']}")
+        lines.append(f"Target Model: {metadata['target_model']}")
+
+        if "pii_sanitization" in metadata:
+            lines.append(f"PII Sanitization: {metadata['pii_sanitization']}")
+
+        if "skeleton_mode" in metadata:
+            lines.append(f"Skeleton Mode: {metadata['skeleton_mode']}")
+
+        lines.append("\n" + "="*80)
+
+        # Directory tree (Phase 2 feature)
+        if self.show_dir_tree.get() and files:
+            lines.append("\nDIRECTORY STRUCTURE:")
+            lines.append("="*80)
+            tree = generate_directory_tree(source_path, files)
+            lines.append(tree)
+            lines.append("="*80)
+
+        lines.append("")
+
+        # Files
+        for file_data in files_data:
+            lines.append("="*80)
+            lines.append(f"BEGIN FILE: {file_data['path']}")
+            lines.append("="*80)
+            lines.append(file_data['content'])
+
+            if file_data['content'] and not file_data['content'].endswith('\n'):
+                lines.append("")
+
+            lines.append("="*80)
+            lines.append(f"END FILE: {file_data['path']}")
+            lines.append("="*80)
+            lines.append("")
+
+        return '\n'.join(lines)
 
     def generate_outputs(self):
         """Generate output files for all configured folders"""
@@ -873,6 +1300,151 @@ class TextFileMergerApp:
         messagebox.showinfo("Complete",
                           f"Generated {success_count} output file(s)\n"
                           f"Location: {self.output_folder.get()}")
+
+    # ========================================================================
+    # Phase 2: Profile Management Methods
+    # ========================================================================
+
+    def update_profile_list(self):
+        """Update the profile dropdown with available profiles"""
+        profiles = ["Default"] + self.config.get_profile_names()
+        self.profile_combo['values'] = profiles
+        if self.current_profile.get() not in profiles:
+            self.current_profile.set("Default")
+
+    def get_current_state(self) -> Dict:
+        """Get current application state as a dictionary"""
+        return {
+            "output_folder": self.output_folder.get(),
+            "file_extensions": self.file_extensions.get(),
+            "target_model": self.target_model.get(),
+            "enable_pii_sanitization": self.enable_pii.get(),
+            "enable_binary_detection": self.enable_binary_detect.get(),
+            "respect_gitignore": self.respect_gitignore.get(),
+            "token_soft_limit": self.token_soft_limit.get(),
+            "token_hard_limit": self.token_hard_limit.get(),
+            "enable_skeleton_mode": self.enable_skeleton.get(),
+            "output_format": self.output_format.get(),
+            "show_directory_tree": self.show_dir_tree.get(),
+            "system_prompt": self.system_prompt.get('1.0', 'end-1c'),
+            "source_folders": [e.get_config() for e in self.folder_entries if e.get_config()]
+        }
+
+    def apply_state(self, state: Dict):
+        """Apply a saved state to the current application"""
+        self.output_folder.set(state.get("output_folder", ""))
+        self.file_extensions.set(state.get("file_extensions", ".txt, .py, .md"))
+        self.target_model.set(state.get("target_model", "gpt-4o"))
+        self.enable_pii.set(state.get("enable_pii_sanitization", True))
+        self.enable_binary_detect.set(state.get("enable_binary_detection", True))
+        self.respect_gitignore.set(state.get("respect_gitignore", True))
+        self.token_soft_limit.set(str(state.get("token_soft_limit", 32000)))
+        self.token_hard_limit.set(str(state.get("token_hard_limit", 128000)))
+        self.enable_skeleton.set(state.get("enable_skeleton_mode", False))
+        self.output_format.set(state.get("output_format", "standard"))
+        self.show_dir_tree.set(state.get("show_directory_tree", True))
+
+        # System prompt
+        self.system_prompt.delete('1.0', tk.END)
+        self.system_prompt.insert('1.0', state.get("system_prompt", ""))
+
+        # Clear and reload source folders
+        for entry in self.folder_entries[:]:
+            entry.frame.destroy()
+        self.folder_entries.clear()
+
+        for folder_config in state.get("source_folders", []):
+            if len(self.folder_entries) < self.MAX_FOLDERS:
+                entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
+                                  self.remove_folder_entry)
+                entry.set_config(folder_config)
+                self.folder_entries.append(entry)
+
+        self.update_folder_count()
+
+    def save_profile_action(self):
+        """Save current state as a new profile"""
+        # Ask for profile name
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Save Profile")
+        dialog.geometry("300x100")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="Profile Name:").pack(pady=(10, 5))
+
+        name_var = tk.StringVar()
+        name_entry = ttk.Entry(dialog, textvariable=name_var, width=30)
+        name_entry.pack(pady=5)
+        name_entry.focus()
+
+        def save():
+            profile_name = name_var.get().strip()
+            if not profile_name:
+                messagebox.showwarning("Invalid Name", "Please enter a profile name")
+                return
+
+            if profile_name == "Default":
+                messagebox.showwarning("Reserved Name", "'Default' is a reserved name")
+                return
+
+            state = self.get_current_state()
+            self.config.save_profile(profile_name, state)
+            self.update_profile_list()
+            self.current_profile.set(profile_name)
+            self.log(f"Saved profile: {profile_name}")
+            dialog.destroy()
+            messagebox.showinfo("Success", f"Profile '{profile_name}' saved successfully!")
+
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(pady=10)
+        ttk.Button(button_frame, text="Save", command=save).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=dialog.destroy).pack(side=tk.LEFT)
+
+    def load_profile_action(self):
+        """Load a saved profile"""
+        profile_name = self.current_profile.get()
+
+        if profile_name == "Default":
+            self.log("Default profile is always active")
+            return
+
+        profile_data = self.config.load_profile(profile_name)
+        if profile_data:
+            self.apply_state(profile_data)
+            self.log(f"Loaded profile: {profile_name}")
+            messagebox.showinfo("Success", f"Profile '{profile_name}' loaded successfully!")
+        else:
+            messagebox.showerror("Error", f"Profile '{profile_name}' not found")
+
+    def delete_profile_action(self):
+        """Delete a saved profile"""
+        profile_name = self.current_profile.get()
+
+        if profile_name == "Default":
+            messagebox.showwarning("Cannot Delete", "Cannot delete the Default profile")
+            return
+
+        if messagebox.askyesno("Confirm Delete",
+                              f"Are you sure you want to delete profile '{profile_name}'?"):
+            self.config.delete_profile(profile_name)
+            self.update_profile_list()
+            self.current_profile.set("Default")
+            self.log(f"Deleted profile: {profile_name}")
+            messagebox.showinfo("Success", f"Profile '{profile_name}' deleted")
+
+    def load_template(self, event=None):
+        """Load a system prompt template"""
+        template_name = self.prompt_template.get()
+
+        if template_name == "None":
+            return
+
+        templates = self.config.get("prompt_templates", {})
+        if template_name in templates:
+            self.system_prompt.delete('1.0', tk.END)
+            self.system_prompt.insert('1.0', templates[template_name])
+            self.log(f"Loaded template: {template_name}")
 
     def update_token_budget(self, token_count: int):
         """Update the token budget progress bar and label"""
