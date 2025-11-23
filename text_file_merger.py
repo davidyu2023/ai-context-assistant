@@ -983,9 +983,9 @@ class TextFileMergerApp:
                                            text=f"Folders: 0/{self.MAX_FOLDERS}")
         self.folder_count_label.pack(side=tk.LEFT, padx=10)
 
-        # Save settings button
-        ttk.Button(folders_frame, text="Save Settings",
-                  command=self.save_settings).pack(pady=(5, 0))
+        # Help button
+        ttk.Button(button_frame, text="Help",
+                  command=self.show_help).pack(side=tk.RIGHT, padx=10)
 
         # Status/Log Section
         log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="10")
@@ -1040,6 +1040,10 @@ class TextFileMergerApp:
         # Token count and cost label
         self.token_info_label = ttk.Label(budget_frame, text="0 tokens ($0.00)")
         self.token_info_label.pack(side=tk.LEFT, padx=5)
+
+        # Save settings button for Basic Settings
+        ttk.Button(phase1_frame, text="Save Settings",
+                  command=self.save_settings).pack(pady=(10, 0))
 
         # Output Options Section
         phase2_frame = ttk.LabelFrame(main_container, text="Output Options", padding="10")
@@ -1170,9 +1174,6 @@ class TextFileMergerApp:
         if PYPERCLIP_AVAILABLE:
             ttk.Button(action_frame, text="Copy to Clipboard",
                       command=self.copy_to_clipboard).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(action_frame, text="Help",
-                  command=self.show_help).pack(side=tk.RIGHT, padx=5)
 
     def browse_output_folder(self):
         """Open dialog to select output folder"""
@@ -2105,8 +2106,6 @@ File Extensions field: Specify which file types to include (e.g., .py, .js, .md)
   • Separate multiple extensions with commas
   • Include the dot (e.g., .txt not txt)
 
-"Save Settings" button: Saves your configuration for next session
-
 🗂️ SOURCE FOLDERS TABLE
 -------------------------
 Displays all folders you've added with their output file names
@@ -2138,6 +2137,10 @@ Displays all folders you've added with their output file names
   • Use this to start fresh with a new set of folders
   • Asks for confirmation first
 
+"Help" button: Opens this help guide
+  • Located on the right side of the Folders section
+  • Shows detailed information about all features
+
 ================================================================================
 SECTION 2: STATUS LOG - Monitoring Your Process
 ================================================================================
@@ -2167,7 +2170,11 @@ BASIC SETTINGS - Controlling File Processing
 Soft Limit / Hard Limit: Token budget controls
   • Soft Limit: Warning when approaching limit
   • Hard Limit: Maximum tokens to process
-  • Helps control AI API costs
+
+"Save Settings" button: Saves your configuration for next session
+  • Located at the bottom of the Basic Settings section
+  • Saves all settings including folders, options, and preferences
+  • Settings are automatically loaded when you restart the application
 
 ☑️ Respect .gitignore/.gptignore: Excludes files matching these patterns
   • .gptignore takes priority if both exist
@@ -2239,8 +2246,6 @@ ADDITIONAL ACTIONS
   • Fast way to paste directly into AI chat
   • Shows token count and cost
   • No file created
-
-"Help" button: Shows this help guide (you're reading it now!)
 
 ================================================================================
 TYPICAL WORKFLOWS
