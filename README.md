@@ -139,9 +139,11 @@ The required packages are:
 
 ### Quick Start (Windows Users)
 
-**Easy Launcher:** Double-click `run_ai_context_assistant.bat` to launch the application.
+**Easy Launcher:** Double-click `run_ai_context_assistant.bat` in File Explorer to launch the application.
 
-To pin to your taskbar for quick access:
+**From PowerShell:** Use `.\run_ai_context_assistant.bat` (note the `.\` prefix required by PowerShell)
+
+**Pin to Taskbar** for quick access:
 1. Right-click `run_ai_context_assistant.bat` → **Send to** → **Desktop (create shortcut)**
 2. Right-click the desktop shortcut → **Pin to taskbar**
 3. (Optional) Right-click shortcut → **Properties** → **Change Icon** to customize
