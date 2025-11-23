@@ -1098,10 +1098,11 @@ class TextFileMergerApp:
         folders_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         # Canvas with scrollbar for folder entries
-        canvas_frame = ttk.Frame(folders_container)
+        canvas_frame = ttk.Frame(folders_container, height=250)
         canvas_frame.pack(fill=tk.BOTH, expand=True)
+        canvas_frame.pack_propagate(False)  # Maintain fixed height
 
-        self.canvas = tk.Canvas(canvas_frame, height=300)
+        self.canvas = tk.Canvas(canvas_frame, height=250, bg='white')
         scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
                                  command=self.canvas.yview)
         self.scrollable_frame = ttk.Frame(self.canvas)
@@ -1144,6 +1145,9 @@ class TextFileMergerApp:
 
         ttk.Button(action_frame, text="Clear All Folders",
                   command=self.clear_all_folders).pack(side=tk.LEFT)
+
+        ttk.Button(action_frame, text="Help",
+                  command=self.show_help).pack(side=tk.RIGHT, padx=5)
 
         # Status/Log Section
         log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="10")
@@ -1796,7 +1800,7 @@ class TextFileMergerApp:
         # Ask for profile name
         dialog = tk.Toplevel(self.root)
         dialog.title("Save Profile")
-        dialog.geometry("300x100")
+        dialog.geometry("350x150")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -2036,6 +2040,218 @@ class TextFileMergerApp:
         else:
             self.log("No content to copy")
             messagebox.showwarning("No Content", "No files were processed")
+
+    def show_help(self):
+        """Display help dialog with all features documentation"""
+        help_dialog = tk.Toplevel(self.root)
+        help_dialog.title("AI Context Assistant - Help")
+        help_dialog.geometry("700x600")
+        help_dialog.transient(self.root)
+
+        # Create scrolled text widget for help content
+        help_text = scrolledtext.ScrolledText(help_dialog, wrap=tk.WORD, padx=10, pady=10)
+        help_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        # Help content
+        help_content = """AI CONTEXT ASSISTANT - COMPREHENSIVE FEATURE GUIDE
+
+================================================================================
+OVERVIEW
+================================================================================
+AI Context Assistant helps you combine multiple text files from selected folders
+into single output files optimized for AI model consumption (GPT, Claude, etc.).
+It includes token counting, cost estimation, PII sanitization, and advanced
+filtering capabilities.
+
+================================================================================
+BASIC SETTINGS
+================================================================================
+• Output Folder: Select where generated files will be saved
+• File Extensions: Comma-separated list of file types to include (e.g., .txt, .py, .md)
+• Save Settings: Save your current configuration for future sessions
+
+================================================================================
+PHASE 1 FEATURES - Essential Processing
+================================================================================
+✓ PII Sanitization
+  - Automatically redacts emails, API keys, passwords, and custom names
+  - Configurable custom names to sanitize (e.g., usernames)
+  - Shows redaction summary in logs
+
+✓ Binary File Detection
+  - Automatically skips binary files (images, executables, etc.)
+  - Prevents encoding errors and reduces output size
+
+✓ Token Counting & Cost Estimation
+  - Real-time token counting using tiktoken
+  - Estimated API costs for GPT-4o and other models
+  - Token budget progress bar with soft/hard limits
+  - Soft Limit: Warning threshold for token usage
+  - Hard Limit: Maximum token budget
+
+✓ .gitignore / .gptignore Support
+  - Respects .gitignore patterns in source folders
+  - .gptignore takes precedence if present
+  - Helps exclude build files, dependencies, etc.
+
+✓ Copy to Clipboard
+  - Directly copy merged content to clipboard
+  - Useful for quick AI queries without saving files
+
+================================================================================
+PHASE 2 FEATURES - Output Optimization
+================================================================================
+✓ Skeleton Mode
+  - Extracts only class/function signatures from Python files
+  - Reduces token usage while preserving code structure
+  - Ideal for high-level code reviews and architecture discussions
+
+✓ Directory Tree Visualization
+  - Includes a visual tree structure of all processed files
+  - Helps AI understand project organization
+
+✓ Output Formats
+  - Standard: Traditional delimiter-based format
+  - XML: Optimized for Claude (with metadata tags)
+  - Markdown: Optimized for GPT (with syntax highlighting)
+
+✓ System Prompt Templates
+  - Prepend custom instructions to your context
+  - Pre-configured templates:
+    * Code Review: For reviewing code quality and best practices
+    * Documentation: For generating comprehensive docs
+    * Refactoring: For analyzing improvement opportunities
+  - Templates are included in the generated output
+
+✓ Project Profiles/Workspaces
+  - Save complete configurations as named profiles
+  - Quickly switch between different project setups
+  - Load/Save/Delete profiles
+  - Each profile stores:
+    * Source folders and their settings
+    * File extensions and filters
+    * All feature toggles
+    * System prompts
+    * Output preferences
+
+================================================================================
+PHASE 3 FEATURES - Advanced Filtering & Security
+================================================================================
+✓ Safe Mode
+  - Automatically excludes sensitive files:
+    * Environment files (.env, secrets.json, credentials.yaml)
+    * SSH keys and certificates (.pem, .key, id_rsa)
+    * Database files (.db, .sqlite)
+    * API keys and tokens (api_keys.txt, .npmrc)
+    * Shell history files
+    * AWS credentials
+  - Prevents accidental inclusion of secrets in AI contexts
+
+✓ Semantic Minification
+  - Removes comments and extra whitespace
+  - Reduces token usage while preserving code logic
+  - Supports Python, JavaScript, TypeScript, Java, C/C++, Ruby, Bash
+  - Does NOT remove docstrings or code functionality
+
+✓ Enhanced Statistics
+  - Detailed file type breakdown
+  - Total size in KB and bytes
+  - Character and line counts
+  - Average tokens per file
+  - Compression ratio
+
+✓ Profile Import/Export
+  - Export all profiles to JSON file for backup
+  - Import profiles from other machines or team members
+  - Merge or replace existing profiles
+  - Share project configurations across teams
+
+✓ Advanced File Filtering
+  - Max File Size (KB): Exclude files larger than threshold
+  - Min File Size (KB): Exclude files smaller than threshold
+  - Modified After (YYYY-MM-DD): Only include recently modified files
+  - Useful for focusing on specific file types or recent changes
+
+================================================================================
+SOURCE FOLDERS
+================================================================================
+• Add up to 5 source folders
+• Each folder has independent settings:
+  - Exclude Subfolders: Process only root-level files
+  - Include Archive Folder: Include files in "archive" directories
+  - Output Name: Custom name for the generated file (timestamp auto-added)
+• Browse button for easy folder selection
+• Remove individual folders or clear all at once
+
+================================================================================
+WORKFLOW
+================================================================================
+1. Configure Basic Settings (output folder, file extensions)
+2. Add one or more source folders
+3. Adjust Phase 1 settings (PII sanitization, token limits, etc.)
+4. Choose Phase 2 options (skeleton mode, output format, system prompt)
+5. Configure Phase 3 filters (Safe Mode, file size/date filters)
+6. Optionally save as a Profile for reuse
+7. Click "Generate Output Files" or "Copy to Clipboard"
+8. Review Status Log for processing details and statistics
+
+================================================================================
+TIPS & BEST PRACTICES
+================================================================================
+• Use .gptignore files in your project to exclude build artifacts
+• Enable Safe Mode to prevent accidental secret exposure
+• Use Skeleton Mode for large codebases to reduce token usage
+• Save profiles for different use cases (code review vs documentation)
+• Check token counts before sending to expensive models
+• Use XML format for Claude, Markdown for GPT for optimal results
+• Apply file size filters to focus on specific components
+• Use System Prompt Templates to guide AI behavior
+
+================================================================================
+KEYBOARD SHORTCUTS
+================================================================================
+• Ctrl+S: Quick save settings (if implemented in your environment)
+• Tab: Navigate between fields
+• Enter: Confirm dialogs
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+Q: Source folders area is empty
+A: Make sure you've added folders using the "Add Folder" button
+
+Q: Token count seems high
+A: Try enabling Skeleton Mode or Semantic Minification
+
+Q: Some files are missing
+A: Check if they're excluded by .gitignore/.gptignore or Safe Mode
+
+Q: Can't see all buttons
+A: Resize the window or use scrollbar for better viewing
+
+Q: Clipboard copy not working
+A: Ensure pyperclip is installed: pip install pyperclip
+
+================================================================================
+For more information, visit:
+https://github.com/yourusername/ai-context-assistant
+================================================================================
+"""
+
+        # Insert help content
+        help_text.insert('1.0', help_content)
+        help_text.config(state='disabled')  # Make read-only
+
+        # Close button
+        button_frame = ttk.Frame(help_dialog)
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        ttk.Button(button_frame, text="Close", command=help_dialog.destroy).pack(side=tk.RIGHT)
+
+        # Center the dialog
+        help_dialog.update_idletasks()
+        x = (help_dialog.winfo_screenwidth() // 2) - (help_dialog.winfo_width() // 2)
+        y = (help_dialog.winfo_screenheight() // 2) - (help_dialog.winfo_height() // 2)
+        help_dialog.geometry(f"+{x}+{y}")
 
 
 def main():
