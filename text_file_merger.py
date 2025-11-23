@@ -1098,11 +1098,11 @@ class TextFileMergerApp:
         folders_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
         # Canvas with scrollbar for folder entries
-        canvas_frame = ttk.Frame(folders_container, height=250)
-        canvas_frame.pack(fill=tk.BOTH, expand=True)
+        canvas_frame = ttk.Frame(folders_container, height=200)
+        canvas_frame.pack(fill=tk.X, pady=(0, 5))
         canvas_frame.pack_propagate(False)  # Maintain fixed height
 
-        self.canvas = tk.Canvas(canvas_frame, height=250, bg='white')
+        self.canvas = tk.Canvas(canvas_frame, height=200, bg='white')
         scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
                                  command=self.canvas.yview)
         self.scrollable_frame = ttk.Frame(self.canvas)
