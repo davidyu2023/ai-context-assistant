@@ -6,7 +6,7 @@ with clear delimiters and timestamps.
 Phase 1 Features:
 - Token counting and cost estimation
 - Binary file detection
-- .gptignore/.gitignore support
+- .gptignore/.gptignore support
 - PII sanitization
 - Copy to clipboard
 
@@ -16,6 +16,14 @@ Phase 2 Features:
 - Directory tree visualization
 - System Prompt Templates
 - Model-specific output formats (XML/Markdown)
+
+Phase 3 Features:
+- Safe Mode (sensitive file protection)
+- Enhanced statistics and analytics
+- Profile import/export
+- Advanced filtering (size, date, patterns)
+- Semantic minification
+- Batch profile processing
 """
 
 import tkinter as tk
@@ -432,6 +440,200 @@ def format_as_markdown(files_data: List[Dict[str, str]], metadata: Dict) -> str:
     return '\n'.join(lines)
 
 
+# ============================================================================
+# Phase 3 Utility Functions
+# ============================================================================
+
+# Safe Mode: Sensitive file patterns that should never be included
+SAFE_MODE_PATTERNS = [
+    # Environment and secrets
+    '.env', '.env.local', '.env.production', '.env.development',
+    'secrets.yaml', 'secrets.yml', 'secrets.json',
+    'credentials.json', 'credentials.yaml',
+
+    # SSH and certificates
+    'id_rsa', 'id_dsa', 'id_ed25519',
+    '*.pem', '*.key', '*.p12', '*.pfx',
+
+    # Database
+    '*.db', '*.sqlite', '*.sqlite3',
+
+    # API keys and tokens
+    'api_keys.txt', 'tokens.txt',
+    '.npmrc', '.pypirc',
+
+    # Shell history
+    '.bash_history', '.zsh_history', '.python_history',
+
+    # AWS credentials
+    '.aws/credentials', '.aws/config',
+]
+
+def is_safe_mode_excluded(file_path: Path) -> bool:
+    """
+    Check if file should be excluded in Safe Mode.
+
+    Args:
+        file_path: Path to check
+
+    Returns:
+        True if file matches safe mode exclusion patterns
+    """
+    file_name = file_path.name.lower()
+
+    for pattern in SAFE_MODE_PATTERNS:
+        if '*' in pattern:
+            # Wildcard pattern
+            import fnmatch
+            if fnmatch.fnmatch(file_name, pattern.lower()):
+                return True
+        else:
+            # Exact match
+            if file_name == pattern or str(file_path).endswith(pattern):
+                return True
+
+    return False
+
+
+def semantic_minify(content: str, language: str = 'python') -> str:
+    """
+    Apply semantic minification to reduce tokens while preserving meaning.
+
+    Args:
+        content: Content to minify
+        language: Programming language (python, javascript, etc.)
+
+    Returns:
+        Minified content
+    """
+    lines = content.split('\n')
+    minified_lines = []
+
+    for line in lines:
+        # Skip empty lines
+        if not line.strip():
+            continue
+
+        # Remove single-line comments based on language
+        if language in ['python', 'bash', 'ruby']:
+            # Python-style comments
+            if line.strip().startswith('#') and not line.strip().startswith('#!'):
+                continue
+            # Remove inline comments (preserve strings)
+            if '#' in line and not line.strip().startswith('#'):
+                # Simple heuristic: remove # comments not in strings
+                if line.count('"') % 2 == 0 and line.count("'") % 2 == 0:
+                    line = line.split('#')[0].rstrip()
+
+        elif language in ['javascript', 'typescript', 'java', 'c', 'cpp']:
+            # C-style single-line comments
+            if line.strip().startswith('//'):
+                continue
+            if '//' in line:
+                line = line.split('//')[0].rstrip()
+
+        # Collapse multiple spaces (but preserve indentation)
+        stripped = line.lstrip()
+        indent = line[:len(line) - len(stripped)]
+        stripped = ' '.join(stripped.split())
+        line = indent + stripped
+
+        if line.strip():
+            minified_lines.append(line)
+
+    return '\n'.join(minified_lines)
+
+
+def calculate_statistics(files: List[Path], content: str, token_count: int) -> Dict:
+    """
+    Calculate detailed statistics about the generated context.
+
+    Args:
+        files: List of included files
+        content: Merged content
+        token_count: Token count
+
+    Returns:
+        Statistics dictionary
+    """
+    # File type breakdown
+    file_types = {}
+    total_size = 0
+
+    for file in files:
+        ext = file.suffix.lower() or '.txt'
+        file_types[ext] = file_types.get(ext, 0) + 1
+        try:
+            total_size += file.stat().st_size
+        except:
+            pass
+
+    # Content stats
+    lines = content.split('\n')
+    char_count = len(content)
+
+    stats = {
+        'total_files': len(files),
+        'file_types': file_types,
+        'total_size_bytes': total_size,
+        'total_size_kb': round(total_size / 1024, 2),
+        'character_count': char_count,
+        'line_count': len(lines),
+        'token_count': token_count,
+        'avg_tokens_per_file': round(token_count / len(files), 2) if files else 0,
+        'compression_ratio': round((1 - char_count / total_size) * 100, 2) if total_size > 0 else 0
+    }
+
+    return stats
+
+
+def filter_files_by_criteria(files: List[Path], max_size_kb: Optional[int] = None,
+                             min_size_kb: Optional[int] = None,
+                             modified_after: Optional[str] = None) -> List[Path]:
+    """
+    Filter files based on advanced criteria.
+
+    Args:
+        files: List of files to filter
+        max_size_kb: Maximum file size in KB
+        min_size_kb: Minimum file size in KB
+        modified_after: ISO date string (YYYY-MM-DD)
+
+    Returns:
+        Filtered list of files
+    """
+    filtered = []
+
+    for file in files:
+        try:
+            # Size filtering
+            if max_size_kb is not None or min_size_kb is not None:
+                size_kb = file.stat().st_size / 1024
+
+                if max_size_kb is not None and size_kb > max_size_kb:
+                    continue
+
+                if min_size_kb is not None and size_kb < min_size_kb:
+                    continue
+
+            # Date filtering
+            if modified_after:
+                from datetime import datetime as dt
+                mod_time = dt.fromtimestamp(file.stat().st_mtime)
+                filter_date = dt.fromisoformat(modified_after)
+
+                if mod_time < filter_date:
+                    continue
+
+            filtered.append(file)
+
+        except Exception:
+            # If we can't stat the file, include it by default
+            filtered.append(file)
+
+    return filtered
+
+
 class Config:
     """Handles persistent configuration storage"""
 
@@ -484,7 +686,14 @@ class Config:
                 "Code Review": "You are a senior software engineer. Review this code for:\n- Code quality and best practices\n- Potential bugs\n- Performance issues\n- Security vulnerabilities",
                 "Documentation": "You are a technical writer. Generate comprehensive documentation for this codebase including:\n- Overview\n- Architecture\n- API documentation\n- Usage examples",
                 "Refactoring": "You are an expert in code refactoring. Analyze this code and suggest improvements for:\n- Code structure\n- Design patterns\n- Maintainability\n- Testability"
-            }
+            },
+            # Phase 3 settings
+            "enable_safe_mode": True,
+            "enable_semantic_minify": False,
+            "show_statistics": True,
+            "max_file_size_kb": None,
+            "min_file_size_kb": None,
+            "modified_after": None
         }
 
     def get(self, key: str, default=None):
@@ -517,6 +726,59 @@ class Config:
     def get_profile_names(self) -> List[str]:
         """Get list of all profile names"""
         return list(self.data.get('profiles', {}).keys())
+
+    # Phase 3: Profile Import/Export Methods
+    def export_profiles(self, export_path: str) -> bool:
+        """Export all profiles to a JSON file"""
+        try:
+            export_data = {
+                "profiles": self.data.get('profiles', {}),
+                "prompt_templates": self.data.get('prompt_templates', {}),
+                "exported_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                "version": "1.0"
+            }
+            with open(export_path, 'w') as f:
+                json.dump(export_data, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error exporting profiles: {e}")
+            return False
+
+    def import_profiles(self, import_path: str, merge: bool = True) -> bool:
+        """
+        Import profiles from a JSON file.
+
+        Args:
+            import_path: Path to import file
+            merge: If True, merge with existing profiles; if False, replace all
+        """
+        try:
+            with open(import_path, 'r') as f:
+                import_data = json.load(f)
+
+            if 'profiles' in import_data:
+                if merge:
+                    # Merge with existing profiles
+                    if 'profiles' not in self.data:
+                        self.data['profiles'] = {}
+                    self.data['profiles'].update(import_data['profiles'])
+                else:
+                    # Replace all profiles
+                    self.data['profiles'] = import_data['profiles']
+
+            if 'prompt_templates' in import_data:
+                if merge:
+                    if 'prompt_templates' not in self.data:
+                        self.data['prompt_templates'] = {}
+                    self.data['prompt_templates'].update(import_data['prompt_templates'])
+                else:
+                    self.data['prompt_templates'] = import_data['prompt_templates']
+
+            self.save()
+            return True
+        except Exception as e:
+            print(f"Error importing profiles: {e}")
+            return False
 
 
 class FolderEntry:
@@ -783,6 +1045,61 @@ class TextFileMergerApp:
         self.system_prompt.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         self.system_prompt.insert('1.0', self.config.get("system_prompt", ""))
 
+        # Phase 3 Features Section
+        phase3_frame = ttk.LabelFrame(main_container, text="Phase 3 Features", padding="10")
+        phase3_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Row 1: Security and optimization
+        p3_row1_frame = ttk.Frame(phase3_frame)
+        p3_row1_frame.pack(fill=tk.X, pady=(0, 5))
+
+        self.enable_safe_mode = tk.BooleanVar(value=self.config.get("enable_safe_mode", True))
+        ttk.Checkbutton(p3_row1_frame, text="Safe Mode (exclude sensitive files)",
+                       variable=self.enable_safe_mode).pack(side=tk.LEFT)
+
+        self.enable_minify = tk.BooleanVar(value=self.config.get("enable_semantic_minify", False))
+        ttk.Checkbutton(p3_row1_frame, text="Semantic Minify (remove comments)",
+                       variable=self.enable_minify).pack(side=tk.LEFT, padx=15)
+
+        self.show_stats = tk.BooleanVar(value=self.config.get("show_statistics", True))
+        ttk.Checkbutton(p3_row1_frame, text="Show Statistics",
+                       variable=self.show_stats).pack(side=tk.LEFT, padx=15)
+
+        # Row 2: Profile import/export
+        p3_row2_frame = ttk.Frame(phase3_frame)
+        p3_row2_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(p3_row2_frame, text="Profiles:").pack(side=tk.LEFT)
+        ttk.Button(p3_row2_frame, text="Import...", command=self.import_profiles_action,
+                  width=10).pack(side=tk.LEFT, padx=5)
+        ttk.Button(p3_row2_frame, text="Export...", command=self.export_profiles_action,
+                  width=10).pack(side=tk.LEFT, padx=2)
+
+        # Row 3: Advanced filtering
+        p3_row3_frame = ttk.Frame(phase3_frame)
+        p3_row3_frame.pack(fill=tk.X, pady=(0, 0))
+
+        ttk.Label(p3_row3_frame, text="File Filters:").pack(side=tk.LEFT)
+
+        ttk.Label(p3_row3_frame, text="Max Size (KB):").pack(side=tk.LEFT, padx=(10, 0))
+        self.max_size_entry = ttk.Entry(p3_row3_frame, width=8)
+        self.max_size_entry.pack(side=tk.LEFT, padx=5)
+        if self.config.get("max_file_size_kb"):
+            self.max_size_entry.insert(0, str(self.config.get("max_file_size_kb")))
+
+        ttk.Label(p3_row3_frame, text="Min Size (KB):").pack(side=tk.LEFT, padx=(10, 0))
+        self.min_size_entry = ttk.Entry(p3_row3_frame, width=8)
+        self.min_size_entry.pack(side=tk.LEFT, padx=5)
+        if self.config.get("min_file_size_kb"):
+            self.min_size_entry.insert(0, str(self.config.get("min_file_size_kb")))
+
+        ttk.Label(p3_row3_frame, text="Modified After:").pack(side=tk.LEFT, padx=(10, 0))
+        self.modified_after_entry = ttk.Entry(p3_row3_frame, width=12)
+        self.modified_after_entry.pack(side=tk.LEFT, padx=5)
+        if self.config.get("modified_after"):
+            self.modified_after_entry.insert(0, str(self.config.get("modified_after")))
+        ttk.Label(p3_row3_frame, text="(YYYY-MM-DD)", font=('', 8)).pack(side=tk.LEFT)
+
         # Source Folders Section
         folders_container = ttk.LabelFrame(main_container, text="Source Folders",
                                           padding="10")
@@ -880,13 +1197,46 @@ class TextFileMergerApp:
         messagebox.showinfo("Settings", "Settings saved successfully!")
 
     def save_source_folders(self):
-        """Save current source folder configurations to config"""
+        """Save current source folder configurations and all settings to config"""
         folder_configs = []
         for entry in self.folder_entries:
             config = entry.get_config()
             if config:
                 folder_configs.append(config)
         self.config.set("source_folders", folder_configs)
+
+        # Save all Phase 1, 2, 3 settings
+        self.config.set("output_folder", self.output_folder.get())
+        self.config.set("file_extensions", self.file_extensions.get())
+        self.config.set("target_model", self.target_model.get())
+        self.config.set("enable_pii_sanitization", self.enable_pii.get())
+        self.config.set("enable_binary_detection", self.enable_binary_detect.get())
+        self.config.set("respect_gitignore", self.respect_gitignore.get())
+        self.config.set("enable_skeleton_mode", self.enable_skeleton.get())
+        self.config.set("output_format", self.output_format.get())
+        self.config.set("show_directory_tree", self.show_dir_tree.get())
+        self.config.set("system_prompt", self.system_prompt.get('1.0', 'end-1c'))
+
+        # Phase 3 settings
+        self.config.set("enable_safe_mode", self.enable_safe_mode.get())
+        self.config.set("enable_semantic_minify", self.enable_minify.get())
+        self.config.set("show_statistics", self.show_stats.get())
+
+        # Advanced filtering
+        try:
+            max_val = self.max_size_entry.get().strip()
+            self.config.set("max_file_size_kb", int(max_val) if max_val else None)
+        except ValueError:
+            self.config.set("max_file_size_kb", None)
+
+        try:
+            min_val = self.min_size_entry.get().strip()
+            self.config.set("min_file_size_kb", int(min_val) if min_val else None)
+        except ValueError:
+            self.config.set("min_file_size_kb", None)
+
+        modified_val = self.modified_after_entry.get().strip()
+        self.config.set("modified_after", modified_val if modified_val else None)
 
     def load_source_folders(self):
         """Load saved source folder configurations from config"""
@@ -1047,14 +1397,33 @@ class TextFileMergerApp:
                 skipped.append(f"{file_path.name} (binary file)")
                 continue
 
+            # Phase 3: Check Safe Mode
+            if self.enable_safe_mode.get() and is_safe_mode_excluded(file_path):
+                skipped.append(f"{file_path.name} (excluded by Safe Mode)")
+                continue
+
             files.append(file_path)
+
+        # Phase 3: Apply advanced filtering
+        max_size = self.config.get("max_file_size_kb")
+        min_size = self.config.get("min_file_size_kb")
+        modified_after = self.config.get("modified_after")
+
+        if max_size or min_size or modified_after:
+            before_count = len(files)
+            files = filter_files_by_criteria(files, max_size, min_size, modified_after)
+            filtered_count = before_count - len(files)
+            if filtered_count > 0:
+                skipped.append(f"{filtered_count} file(s) filtered by size/date criteria")
 
         return sorted(files), skipped
 
     def merge_files(self, files: List[Path], output_path: str, source_folder: str) -> Tuple[bool, str, int, List[str]]:
         """
-        Merge multiple files with Phase 1 & 2 features: PII sanitization, token counting,
-        skeleton mode, directory tree, system prompts, and output formats.
+        Merge multiple files with Phase 1, 2 & 3 features:
+        - Phase 1: PII sanitization, token counting, binary detection, .gitignore support
+        - Phase 2: Skeleton mode, directory tree, system prompts, output formats, profiles
+        - Phase 3: Safe mode, semantic minification, enhanced statistics, advanced filtering
 
         Returns:
             Tuple of (success, merged_content, token_count, pii_redactions)
@@ -1111,6 +1480,18 @@ class TextFileMergerApp:
                         if redactions:
                             all_redactions.extend([f"{display_path}: {r}" for r in redactions])
 
+                    # Phase 3: Apply semantic minification
+                    if self.enable_minify.get():
+                        # Detect language from file extension
+                        ext = file_path.suffix.lower()
+                        lang_map = {
+                            '.py': 'python', '.js': 'javascript', '.ts': 'typescript',
+                            '.java': 'java', '.cpp': 'cpp', '.c': 'c',
+                            '.rb': 'ruby', '.sh': 'bash'
+                        }
+                        language = lang_map.get(ext, 'python')
+                        content = semantic_minify(content, language)
+
                     files_data.append({"path": display_path, "content": content})
 
                 except Exception as e:
@@ -1138,6 +1519,20 @@ class TextFileMergerApp:
 
             # Count tokens
             token_count = count_tokens(merged_content, self.target_model.get())
+
+            # Phase 3: Calculate enhanced statistics
+            if self.show_stats.get():
+                stats = calculate_statistics(files, merged_content, token_count)
+                self.log(f"\n=== Enhanced Statistics ===")
+                self.log(f"Total Files: {stats['total_files']}")
+                self.log(f"File Types: {stats['file_types']}")
+                self.log(f"Total Size: {stats['total_size_kb']} KB ({stats['total_size_bytes']} bytes)")
+                self.log(f"Characters: {stats['character_count']:,}")
+                self.log(f"Lines: {stats['line_count']:,}")
+                self.log(f"Tokens: {stats['token_count']:,}")
+                self.log(f"Avg Tokens/File: {stats['avg_tokens_per_file']}")
+                if stats['compression_ratio'] > 0:
+                    self.log(f"Compression Ratio: {stats['compression_ratio']}%")
 
             # Write to file
             with open(output_path, 'w', encoding='utf-8', errors='ignore') as outfile:
@@ -1314,6 +1709,29 @@ class TextFileMergerApp:
 
     def get_current_state(self) -> Dict:
         """Get current application state as a dictionary"""
+        # Parse filter values
+        max_size = None
+        min_size = None
+        modified_after = None
+
+        try:
+            max_val = self.max_size_entry.get().strip()
+            if max_val:
+                max_size = int(max_val)
+        except ValueError:
+            pass
+
+        try:
+            min_val = self.min_size_entry.get().strip()
+            if min_val:
+                min_size = int(min_val)
+        except ValueError:
+            pass
+
+        modified_val = self.modified_after_entry.get().strip()
+        if modified_val:
+            modified_after = modified_val
+
         return {
             "output_folder": self.output_folder.get(),
             "file_extensions": self.file_extensions.get(),
@@ -1327,6 +1745,13 @@ class TextFileMergerApp:
             "output_format": self.output_format.get(),
             "show_directory_tree": self.show_dir_tree.get(),
             "system_prompt": self.system_prompt.get('1.0', 'end-1c'),
+            # Phase 3 settings
+            "enable_safe_mode": self.enable_safe_mode.get(),
+            "enable_semantic_minify": self.enable_minify.get(),
+            "show_statistics": self.show_stats.get(),
+            "max_file_size_kb": max_size,
+            "min_file_size_kb": min_size,
+            "modified_after": modified_after,
             "source_folders": [e.get_config() for e in self.folder_entries if e.get_config()]
         }
 
@@ -1343,6 +1768,24 @@ class TextFileMergerApp:
         self.enable_skeleton.set(state.get("enable_skeleton_mode", False))
         self.output_format.set(state.get("output_format", "standard"))
         self.show_dir_tree.set(state.get("show_directory_tree", True))
+
+        # Phase 3 settings
+        self.enable_safe_mode.set(state.get("enable_safe_mode", True))
+        self.enable_minify.set(state.get("enable_semantic_minify", False))
+        self.show_stats.set(state.get("show_statistics", True))
+
+        # Advanced filtering
+        self.max_size_entry.delete(0, tk.END)
+        if state.get("max_file_size_kb"):
+            self.max_size_entry.insert(0, str(state.get("max_file_size_kb")))
+
+        self.min_size_entry.delete(0, tk.END)
+        if state.get("min_file_size_kb"):
+            self.min_size_entry.insert(0, str(state.get("min_file_size_kb")))
+
+        self.modified_after_entry.delete(0, tk.END)
+        if state.get("modified_after"):
+            self.modified_after_entry.insert(0, str(state.get("modified_after")))
 
         # System prompt
         self.system_prompt.delete('1.0', tk.END)
@@ -1432,6 +1875,50 @@ class TextFileMergerApp:
             self.current_profile.set("Default")
             self.log(f"Deleted profile: {profile_name}")
             messagebox.showinfo("Success", f"Profile '{profile_name}' deleted")
+
+    def import_profiles_action(self):
+        """Import profiles from a JSON file"""
+        from tkinter import filedialog
+        file_path = filedialog.askopenfilename(
+            title="Import Profiles",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+
+        if file_path:
+            # Ask if merge or replace
+            merge = messagebox.askyesno(
+                "Import Mode",
+                "Merge with existing profiles?\n\nYes = Merge (keep existing)\nNo = Replace (overwrite all)"
+            )
+
+            if self.config.import_profiles(file_path, merge):
+                self.update_profile_list()
+                self.update_template_list()
+                self.log(f"Imported profiles from: {file_path}")
+                messagebox.showinfo("Success", "Profiles imported successfully!")
+            else:
+                messagebox.showerror("Error", "Failed to import profiles")
+
+    def export_profiles_action(self):
+        """Export all profiles to a JSON file"""
+        from tkinter import filedialog
+        file_path = filedialog.asksaveasfilename(
+            title="Export Profiles",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+
+        if file_path:
+            if self.config.export_profiles(file_path):
+                self.log(f"Exported profiles to: {file_path}")
+                messagebox.showinfo("Success", "Profiles exported successfully!")
+            else:
+                messagebox.showerror("Error", "Failed to export profiles")
+
+    def update_template_list(self):
+        """Update the template dropdown with current templates"""
+        template_names = ["None"] + list(self.config.get("prompt_templates", {}).keys())
+        self.template_combo['values'] = template_names
 
     def load_template(self, event=None):
         """Load a system prompt template"""

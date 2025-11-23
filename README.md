@@ -70,6 +70,45 @@ A cross-platform GUI application for combining multiple text files into a single
 - **Markdown Format**: Optimized for GPT models with syntax-highlighted code blocks
 - **Automatic Language Detection**: Smart syntax highlighting based on file extensions
 
+### Phase 3 Features (NEW!)
+
+#### 🔒 Safe Mode (Enhanced Security)
+- **Automatic Sensitive File Exclusion**: Protects against accidental inclusion of sensitive files
+- **28 Built-in Patterns**: Environment files (.env), SSH keys (id_rsa), credentials, secrets, API keys
+- **Database Files**: Automatically excludes .db, .sqlite, .sqlite3 files
+- **Shell History**: Prevents .bash_history, .zsh_history from being included
+- **AWS Credentials**: Excludes .aws/credentials and .aws/config files
+- **Wildcard Support**: Pattern matching for *.pem, *.key, *.p12 certificates
+
+#### ⚡ Semantic Minification
+- **Comment Removal**: Strips single-line and inline comments while preserving code
+- **Multi-Language Support**: Python (#), JavaScript/TypeScript (//), Java, C/C++, Ruby, Bash
+- **Whitespace Normalization**: Collapses multiple spaces while preserving indentation
+- **~40% Token Reduction**: Typical reduction in commented code without losing functionality
+- **Selective Application**: Apply only when token budget is tight
+
+#### 📊 Enhanced Statistics & Analytics
+- **File Type Breakdown**: Count and categorize files by extension
+- **Size Analytics**: Total size in bytes and KB for all included files
+- **Character & Line Counts**: Detailed content metrics
+- **Token Analysis**: Average tokens per file, total token count
+- **Compression Ratio**: Measure efficiency of context generation
+- **Real-time Display**: Statistics shown in status log after generation
+
+#### 🔍 Advanced File Filtering
+- **Size-Based Filtering**: Set minimum and maximum file size limits (in KB)
+- **Date-Based Filtering**: Include only files modified after a specific date (YYYY-MM-DD)
+- **Combined Criteria**: Apply multiple filters simultaneously
+- **Smart Exclusion**: Automatically skip files that don't meet criteria
+- **Filter Summary**: Shows count of filtered files in status log
+
+#### 💾 Profile Import/Export
+- **Backup Profiles**: Export all profiles and templates to JSON file
+- **Share Configurations**: Transfer profiles between machines or team members
+- **Merge or Replace**: Choose to merge imported profiles or replace all
+- **Version Tracking**: Export includes timestamp and version information
+- **Template Portability**: Prompt templates are included in exports
+
 ## Requirements
 
 - Python 3.7 or higher
@@ -243,6 +282,79 @@ ai-context-assistant/
 \```
 ```
 
+### Phase 3 Features Usage
+
+#### Safe Mode
+1. Check **"Safe Mode (exclude sensitive files)"** in Phase 3 Features (enabled by default)
+2. Automatically excludes 28 types of sensitive files:
+   - Environment files (.env, .env.local, etc.)
+   - SSH keys (id_rsa, id_dsa, id_ed25519)
+   - Certificates (*.pem, *.key, *.p12)
+   - Credentials (credentials.json, .aws/credentials)
+   - Database files (*.db, *.sqlite)
+   - API keys and tokens
+   - Shell history files
+3. Skipped files are logged in the status with reason: "(excluded by Safe Mode)"
+4. Provides peace of mind when generating context from repositories
+
+#### Semantic Minification
+1. Check **"Semantic Minify (remove comments)"** to enable
+2. Applies to code files: Python, JavaScript, TypeScript, Java, C/C++, Ruby, Bash
+3. Removes:
+   - Single-line comments (# for Python, // for JS/Java/C)
+   - Inline comments (preserving string literals)
+   - Empty lines
+   - Excessive whitespace
+4. Preserves:
+   - All code logic and functionality
+   - Indentation structure
+   - Shebang lines (#!/usr/bin/env python)
+5. Typical 40% token reduction on commented code
+6. **Best for**: When you're close to token limits and comments aren't needed
+
+#### Enhanced Statistics
+1. Check **"Show Statistics"** (enabled by default)
+2. After generation, view detailed analytics in the status log:
+   - **Total Files**: Count of files included
+   - **File Types**: Breakdown by extension (e.g., {'.py': 15, '.md': 3})
+   - **Total Size**: Size in KB and bytes
+   - **Characters**: Total character count
+   - **Lines**: Total line count
+   - **Tokens**: Total token count
+   - **Avg Tokens/File**: Average tokens per file
+   - **Compression Ratio**: Efficiency of context generation
+3. Use statistics to optimize your context generation strategy
+
+#### Advanced File Filtering
+1. In Phase 3 Features section, set filter criteria:
+   - **Max Size (KB)**: Only include files smaller than this size
+   - **Min Size (KB)**: Only include files larger than this size
+   - **Modified After**: Only include files modified after date (YYYY-MM-DD format)
+2. Filters are applied **after** other exclusions (binary, .gitignore, Safe Mode)
+3. Multiple filters can be combined
+4. Status log shows: "X file(s) filtered by size/date criteria"
+
+**Example Use Cases:**
+- `Max Size: 500` - Exclude large generated files
+- `Min Size: 1` - Exclude empty files
+- `Modified After: 2024-11-01` - Only recent changes for incremental reviews
+- Combined: `Max: 500, Min: 1, After: 2024-11-01` - Recent, reasonably-sized files
+
+#### Profile Import/Export
+1. **To Export Profiles:**
+   - Click **"Export..."** in Phase 3 Features
+   - Choose location and filename (e.g., `my-profiles.json`)
+   - All profiles and prompt templates are saved with timestamp
+2. **To Import Profiles:**
+   - Click **"Import..."** in Phase 3 Features
+   - Select the JSON file to import
+   - Choose **Merge** (keep existing + add new) or **Replace** (overwrite all)
+   - Imported profiles appear in the Profile dropdown immediately
+3. **Best Practices:**
+   - Export before major changes to backup configurations
+   - Share profiles with team members for consistent context generation
+   - Import starter templates from community repositories
+
 ## Output Format
 
 Each output file contains metadata and all text files from the source folder with clear delimiters:
@@ -292,6 +404,14 @@ Settings are automatically saved to `config.json` in the application directory a
 - `profiles`: Dictionary of saved project profiles
 - `prompt_templates`: Dictionary of reusable system prompt templates
 
+### Phase 3 Settings
+- `enable_safe_mode`: Automatically exclude sensitive files (default: `true`)
+- `enable_semantic_minify`: Remove comments and whitespace to reduce tokens (default: `false`)
+- `show_statistics`: Display enhanced statistics after generation (default: `true`)
+- `max_file_size_kb`: Maximum file size in KB to include (default: `null` - no limit)
+- `min_file_size_kb`: Minimum file size in KB to include (default: `null` - no limit)
+- `modified_after`: Only include files modified after this date in YYYY-MM-DD format (default: `null`)
+
 ### Example config.json
 ```json
 {
@@ -308,16 +428,26 @@ Settings are automatically saved to `config.json` in the application directory a
   "show_directory_tree": true,
   "system_prompt": "You are a senior software engineer...",
   "current_profile": "Backend API",
+  "enable_safe_mode": true,
+  "enable_semantic_minify": false,
+  "show_statistics": true,
+  "max_file_size_kb": 500,
+  "min_file_size_kb": null,
+  "modified_after": null,
   "profiles": {
     "Backend API": {
       "output_folder": "/projects/backend/context",
       "source_folders": [...],
-      "system_prompt": "Review this backend API code..."
+      "system_prompt": "Review this backend API code...",
+      "enable_safe_mode": true,
+      "enable_semantic_minify": false
     },
     "Frontend UI": {
       "output_folder": "/projects/frontend/context",
       "source_folders": [...],
-      "system_prompt": "Analyze this React application..."
+      "system_prompt": "Analyze this React application...",
+      "max_file_size_kb": 1000,
+      "modified_after": "2024-11-01"
     }
   }
 }
