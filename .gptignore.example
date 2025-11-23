@@ -1,0 +1,58 @@
+# Example .gptignore file
+# Place this file in your project root and rename to .gptignore
+
+# Dependencies
+node_modules/
+__pycache__/
+venv/
+.venv/
+env/
+dist/
+build/
+
+# IDE and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Sensitive files
+.env
+.env.local
+*.pem
+*.key
+id_rsa
+secrets.yaml
+credentials.json
+
+# Build artifacts
+*.pyc
+*.pyo
+*.dll
+*.exe
+*.o
+*.so
+
+# Logs
+*.log
+logs/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Images (binary files)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.svg
+*.pdf
