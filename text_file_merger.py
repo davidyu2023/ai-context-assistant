@@ -964,7 +964,14 @@ class TextFileMergerApp:
         self.add_folder_btn.pack(side=tk.LEFT, padx=(0, 5))
 
         ttk.Button(button_frame, text="Remove Selected",
-                  command=self.remove_selected_folder).pack(side=tk.LEFT)
+                  command=self.remove_selected_folder).pack(side=tk.LEFT, padx=(0, 5))
+
+        ttk.Button(button_frame, text="Generate Output Files",
+                  command=self.generate_outputs,
+                  style='Accent.TButton').pack(side=tk.LEFT, padx=(0, 5))
+
+        ttk.Button(button_frame, text="Clear All Folders",
+                  command=self.clear_all_folders).pack(side=tk.LEFT)
 
         self.folder_count_label = ttk.Label(button_frame,
                                            text=f"Folders: 0/{self.MAX_FOLDERS}")
@@ -973,6 +980,14 @@ class TextFileMergerApp:
         # Save settings button
         ttk.Button(folders_frame, text="Save Settings",
                   command=self.save_settings).pack(pady=(5, 0))
+
+        # Status/Log Section
+        log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="10")
+        log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 10))
+
+        self.log_text = scrolledtext.ScrolledText(log_frame, height=8,
+                                                  state='disabled', wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True)
 
         # Basic Settings Section
         phase1_frame = ttk.LabelFrame(main_container, text="Basic Settings", padding="10")
@@ -1141,32 +1156,17 @@ class TextFileMergerApp:
             self.modified_after_entry.insert(0, str(self.config.get("modified_after")))
         ttk.Label(p3_row3_frame, text="(YYYY-MM-DD)", font=('', 8)).pack(side=tk.LEFT)
 
-        # Action Buttons
+        # Additional Action Buttons
         action_frame = ttk.Frame(main_container)
-        action_frame.pack(fill=tk.X)
-
-        ttk.Button(action_frame, text="Generate Output Files",
-                  command=self.generate_outputs,
-                  style='Accent.TButton').pack(side=tk.LEFT, padx=5)
+        action_frame.pack(fill=tk.X, pady=(10, 0))
 
         # Add Copy to Clipboard button (Phase 1)
         if PYPERCLIP_AVAILABLE:
             ttk.Button(action_frame, text="Copy to Clipboard",
                       command=self.copy_to_clipboard).pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(action_frame, text="Clear All Folders",
-                  command=self.clear_all_folders).pack(side=tk.LEFT)
-
         ttk.Button(action_frame, text="Help",
                   command=self.show_help).pack(side=tk.RIGHT, padx=5)
-
-        # Status/Log Section
-        log_frame = ttk.LabelFrame(main_container, text="Status Log", padding="10")
-        log_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
-
-        self.log_text = scrolledtext.ScrolledText(log_frame, height=8,
-                                                  state='disabled', wrap=tk.WORD)
-        self.log_text.pack(fill=tk.BOTH, expand=True)
 
     def browse_output_folder(self):
         """Open dialog to select output folder"""
