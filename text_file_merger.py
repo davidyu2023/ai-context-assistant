@@ -670,7 +670,6 @@ class Config:
             # Phase 1 settings
             "enable_pii_sanitization": True,
             "custom_sanitize_names": ["davidyu", "david yu"],
-            "target_model": "gpt-4o",
             "enable_binary_detection": True,
             "token_soft_limit": 32000,
             "token_hard_limit": 128000,
@@ -926,28 +925,21 @@ class TextFileMergerApp:
         ttk.Button(settings_frame, text="Save Settings",
                   command=self.save_settings).pack(pady=(5, 0))
 
-        # Phase 1 Features Section
-        phase1_frame = ttk.LabelFrame(main_container, text="Phase 1 Features", padding="10")
+        # Basic Settings Section
+        phase1_frame = ttk.LabelFrame(main_container, text="Basic Settings", padding="10")
         phase1_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # Row 1: Model selection and PII sanitization
+        # Row 1: PII sanitization and binary detection
         row1_frame = ttk.Frame(phase1_frame)
         row1_frame.pack(fill=tk.X, pady=(0, 5))
 
-        ttk.Label(row1_frame, text="Target Model:").pack(side=tk.LEFT)
-        self.target_model = tk.StringVar(value=self.config.get("target_model", "gpt-4o"))
-        model_combo = ttk.Combobox(row1_frame, textvariable=self.target_model,
-                                   values=["gpt-4o", "gpt-4o-mini", "claude-3.5-sonnet", "claude-3-opus"],
-                                   state='readonly', width=20)
-        model_combo.pack(side=tk.LEFT, padx=5)
-
         self.enable_pii = tk.BooleanVar(value=self.config.get("enable_pii_sanitization", True))
         ttk.Checkbutton(row1_frame, text="Enable PII Sanitization",
-                       variable=self.enable_pii).pack(side=tk.LEFT, padx=15)
+                       variable=self.enable_pii).pack(side=tk.LEFT)
 
         self.enable_binary_detect = tk.BooleanVar(value=self.config.get("enable_binary_detection", True))
         ttk.Checkbutton(row1_frame, text="Skip Binary Files",
-                       variable=self.enable_binary_detect).pack(side=tk.LEFT)
+                       variable=self.enable_binary_detect).pack(side=tk.LEFT, padx=15)
 
         # Row 2: Token limits
         row2_frame = ttk.Frame(phase1_frame)
@@ -979,8 +971,8 @@ class TextFileMergerApp:
         self.token_info_label = ttk.Label(budget_frame, text="0 tokens ($0.00)")
         self.token_info_label.pack(side=tk.LEFT, padx=5)
 
-        # Phase 2 Features Section
-        phase2_frame = ttk.LabelFrame(main_container, text="Phase 2 Features", padding="10")
+        # Output Options Section
+        phase2_frame = ttk.LabelFrame(main_container, text="Output Options", padding="10")
         phase2_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Row 1: Skeleton mode and output format
@@ -1045,8 +1037,8 @@ class TextFileMergerApp:
         self.system_prompt.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         self.system_prompt.insert('1.0', self.config.get("system_prompt", ""))
 
-        # Phase 3 Features Section
-        phase3_frame = ttk.LabelFrame(main_container, text="Phase 3 Features", padding="10")
+        # File Filtering & Security Section
+        phase3_frame = ttk.LabelFrame(main_container, text="File Filtering & Security", padding="10")
         phase3_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Row 1: Security and optimization
@@ -1175,7 +1167,6 @@ class TextFileMergerApp:
         self.config.set("file_extensions", self.file_extensions.get())
 
         # Save Phase 1 settings
-        self.config.set("target_model", self.target_model.get())
         self.config.set("enable_pii_sanitization", self.enable_pii.get())
         self.config.set("enable_binary_detection", self.enable_binary_detect.get())
         self.config.set("respect_gitignore", self.respect_gitignore.get())
@@ -1208,7 +1199,6 @@ class TextFileMergerApp:
         # Save all Phase 1, 2, 3 settings
         self.config.set("output_folder", self.output_folder.get())
         self.config.set("file_extensions", self.file_extensions.get())
-        self.config.set("target_model", self.target_model.get())
         self.config.set("enable_pii_sanitization", self.enable_pii.get())
         self.config.set("enable_binary_detection", self.enable_binary_detect.get())
         self.config.set("respect_gitignore", self.respect_gitignore.get())
@@ -1440,7 +1430,6 @@ class TextFileMergerApp:
                 "generated_by": "AI Context Assistant",
                 "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 "total_files": len(files),
-                "target_model": self.target_model.get(),
                 "output_format": output_format
             }
 
@@ -1517,8 +1506,8 @@ class TextFileMergerApp:
                 else:
                     merged_content = f"SYSTEM INSTRUCTIONS:\n{system_prompt}\n\n{'='*80}\n\n{merged_content}"
 
-            # Count tokens
-            token_count = count_tokens(merged_content, self.target_model.get())
+            # Count tokens (using gpt-4o as reference model)
+            token_count = count_tokens(merged_content, "gpt-4o")
 
             # Phase 3: Calculate enhanced statistics
             if self.show_stats.get():
@@ -1553,7 +1542,6 @@ class TextFileMergerApp:
         lines.append("Generated by AI Context Assistant")
         lines.append(f"Timestamp: {metadata['timestamp']}")
         lines.append(f"Total files: {metadata['total_files']}")
-        lines.append(f"Target Model: {metadata['target_model']}")
 
         if "pii_sanitization" in metadata:
             lines.append(f"PII Sanitization: {metadata['pii_sanitization']}")
@@ -1667,8 +1655,8 @@ class TextFileMergerApp:
             success, content, token_count, redactions = self.merge_files(files, output_path, folder_path)
 
             if success:
-                # Calculate cost
-                cost, model = estimate_cost(token_count, self.target_model.get())
+                # Calculate cost (using gpt-4o as reference)
+                cost, model = estimate_cost(token_count, "gpt-4o")
 
                 self.log(f"  Success: Created {output_filename}")
                 self.log(f"  Tokens: {token_count:,} | Estimated cost: ${cost:.4f} ({model})")
@@ -1735,7 +1723,6 @@ class TextFileMergerApp:
         return {
             "output_folder": self.output_folder.get(),
             "file_extensions": self.file_extensions.get(),
-            "target_model": self.target_model.get(),
             "enable_pii_sanitization": self.enable_pii.get(),
             "enable_binary_detection": self.enable_binary_detect.get(),
             "respect_gitignore": self.respect_gitignore.get(),
@@ -1759,7 +1746,6 @@ class TextFileMergerApp:
         """Apply a saved state to the current application"""
         self.output_folder.set(state.get("output_folder", ""))
         self.file_extensions.set(state.get("file_extensions", ".txt, .py, .md"))
-        self.target_model.set(state.get("target_model", "gpt-4o"))
         self.enable_pii.set(state.get("enable_pii_sanitization", True))
         self.enable_binary_detect.set(state.get("enable_binary_detection", True))
         self.respect_gitignore.set(state.get("respect_gitignore", True))
@@ -1942,8 +1928,8 @@ class TextFileMergerApp:
             soft_limit = 32000
             hard_limit = 128000
 
-        # Calculate cost
-        cost, model = estimate_cost(token_count, self.target_model.get())
+        # Calculate cost (using gpt-4o as reference)
+        cost, model = estimate_cost(token_count, "gpt-4o")
 
         # Update label
         self.token_info_label.config(text=f"{token_count:,} tokens (${cost:.4f})")
@@ -2028,7 +2014,7 @@ class TextFileMergerApp:
         if all_content:
             try:
                 pyperclip.copy(all_content)
-                cost, model = estimate_cost(total_tokens, self.target_model.get())
+                cost, model = estimate_cost(total_tokens, "gpt-4o")
 
                 self.log("="*60)
                 self.log(f"SUCCESS: Copied to clipboard!")
