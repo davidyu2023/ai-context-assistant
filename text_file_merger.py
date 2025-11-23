@@ -838,6 +838,8 @@ class FolderEntry:
         folder = filedialog.askdirectory(title="Select Source Folder")
         if folder:
             self.folder_path.set(folder)
+            # Force frame update to ensure proper display
+            self.frame.update_idletasks()
 
     def remove(self):
         """Remove this folder entry"""
@@ -893,12 +895,12 @@ class TextFileMergerApp:
         main_container = ttk.Frame(self.root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Settings Section
-        settings_frame = ttk.LabelFrame(main_container, text="Settings", padding="10")
-        settings_frame.pack(fill=tk.X, pady=(0, 10))
+        # Folders Section (Output + Source Folders)
+        folders_frame = ttk.LabelFrame(main_container, text="Folders", padding="10")
+        folders_frame.pack(fill=tk.X, pady=(0, 10))
 
         # Output folder
-        output_folder_frame = ttk.Frame(settings_frame)
+        output_folder_frame = ttk.Frame(folders_frame)
         output_folder_frame.pack(fill=tk.X, pady=(0, 5))
 
         ttk.Label(output_folder_frame, text="Output Folder:").pack(side=tk.LEFT)
@@ -910,8 +912,8 @@ class TextFileMergerApp:
                   command=self.browse_output_folder).pack(side=tk.LEFT)
 
         # File extensions
-        extensions_frame = ttk.Frame(settings_frame)
-        extensions_frame.pack(fill=tk.X, pady=(0, 5))
+        extensions_frame = ttk.Frame(folders_frame)
+        extensions_frame.pack(fill=tk.X, pady=(0, 10))
 
         ttk.Label(extensions_frame, text="File Extensions:").pack(side=tk.LEFT)
         self.file_extensions = tk.StringVar(
@@ -921,8 +923,45 @@ class TextFileMergerApp:
         ttk.Label(extensions_frame,
                  text="(comma-separated, e.g., .txt, .py, .md)").pack(side=tk.LEFT)
 
+        # Source Folders subsection
+        ttk.Label(folders_frame, text="Source Folders:",
+                 font=('', 9, 'bold')).pack(anchor=tk.W, pady=(5, 5))
+
+        # Canvas with scrollbar for folder entries
+        canvas_frame = ttk.Frame(folders_frame, height=180)
+        canvas_frame.pack(fill=tk.X, pady=(0, 5))
+        canvas_frame.pack_propagate(False)  # Maintain fixed height
+
+        self.canvas = tk.Canvas(canvas_frame, height=180, bg='white')
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
+                                 command=self.canvas.yview)
+        self.scrollable_frame = ttk.Frame(self.canvas)
+
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=scrollbar.set)
+
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Add folder button
+        button_frame = ttk.Frame(folders_frame)
+        button_frame.pack(fill=tk.X, pady=(5, 5))
+
+        self.add_folder_btn = ttk.Button(button_frame, text="Add Source Folder",
+                                         command=self.add_folder_entry)
+        self.add_folder_btn.pack(side=tk.LEFT)
+
+        self.folder_count_label = ttk.Label(button_frame,
+                                           text=f"Folders: 0/{self.MAX_FOLDERS}")
+        self.folder_count_label.pack(side=tk.LEFT, padx=10)
+
         # Save settings button
-        ttk.Button(settings_frame, text="Save Settings",
+        ttk.Button(folders_frame, text="Save Settings",
                   command=self.save_settings).pack(pady=(5, 0))
 
         # Basic Settings Section
@@ -1091,44 +1130,6 @@ class TextFileMergerApp:
         if self.config.get("modified_after"):
             self.modified_after_entry.insert(0, str(self.config.get("modified_after")))
         ttk.Label(p3_row3_frame, text="(YYYY-MM-DD)", font=('', 8)).pack(side=tk.LEFT)
-
-        # Source Folders Section
-        folders_container = ttk.LabelFrame(main_container, text="Source Folders",
-                                          padding="10")
-        folders_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        # Canvas with scrollbar for folder entries
-        canvas_frame = ttk.Frame(folders_container, height=200)
-        canvas_frame.pack(fill=tk.X, pady=(0, 5))
-        canvas_frame.pack_propagate(False)  # Maintain fixed height
-
-        self.canvas = tk.Canvas(canvas_frame, height=200, bg='white')
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
-                                 command=self.canvas.yview)
-        self.scrollable_frame = ttk.Frame(self.canvas)
-
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
-
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
-
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Add folder button
-        button_frame = ttk.Frame(folders_container)
-        button_frame.pack(fill=tk.X, pady=(5, 0))
-
-        self.add_folder_btn = ttk.Button(button_frame, text="Add Folder",
-                                         command=self.add_folder_entry)
-        self.add_folder_btn.pack(side=tk.LEFT)
-
-        self.folder_count_label = ttk.Label(button_frame,
-                                           text=f"Folders: 0/{self.MAX_FOLDERS}")
-        self.folder_count_label.pack(side=tk.LEFT, padx=10)
 
         # Action Buttons
         action_frame = ttk.Frame(main_container)
