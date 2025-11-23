@@ -783,10 +783,9 @@ class Config:
 class FolderEntry:
     """Represents a single folder entry with its settings"""
 
-    def __init__(self, parent_frame, index: int, on_remove_callback, root_window=None):
+    def __init__(self, parent_frame, index: int, on_remove_callback):
         self.index = index
         self.on_remove = on_remove_callback
-        self.root_window = root_window
 
         # Create frame for this entry
         self.frame = ttk.LabelFrame(parent_frame, text=f"Source Folder {index + 1}",
@@ -836,12 +835,7 @@ class FolderEntry:
 
     def browse_folder(self):
         """Open folder selection dialog"""
-        # Use root window as parent if available, otherwise use frame
-        parent = self.root_window if self.root_window else self.frame
-        folder = filedialog.askdirectory(
-            title="Select Source Folder",
-            parent=parent
-        )
+        folder = filedialog.askdirectory(title="Select Source Folder")
         if folder:
             self.folder_path.set(folder)
 
@@ -1244,7 +1238,7 @@ class TextFileMergerApp:
             if len(self.folder_entries) >= self.MAX_FOLDERS:
                 break
             entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                              self.remove_folder_entry, self.root)
+                              self.remove_folder_entry)
             entry.set_config(folder_config)
             self.folder_entries.append(entry)
         self.update_folder_count()
@@ -1259,7 +1253,7 @@ class TextFileMergerApp:
             return
 
         entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                          self.remove_folder_entry, self.root)
+                          self.remove_folder_entry)
         self.folder_entries.append(entry)
         self.update_folder_count()
         self.log(f"Added folder entry {len(self.folder_entries)}")
@@ -1794,7 +1788,7 @@ class TextFileMergerApp:
         for folder_config in state.get("source_folders", []):
             if len(self.folder_entries) < self.MAX_FOLDERS:
                 entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                                  self.remove_folder_entry, self.root)
+                                  self.remove_folder_entry)
                 entry.set_config(folder_config)
                 self.folder_entries.append(entry)
 
