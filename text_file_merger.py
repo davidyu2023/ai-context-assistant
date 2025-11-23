@@ -2074,188 +2074,267 @@ class TextFileMergerApp:
         help_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
         # Help content
-        help_content = """AI CONTEXT ASSISTANT - COMPREHENSIVE FEATURE GUIDE
+        help_content = """AI CONTEXT ASSISTANT - BUTTONS & USAGE GUIDE
 
 ================================================================================
-OVERVIEW
+QUICK START
 ================================================================================
-AI Context Assistant helps you combine multiple text files from selected folders
-into single output files optimized for AI model consumption (GPT, Claude, etc.).
-It includes token counting, cost estimation, PII sanitization, and advanced
-filtering capabilities.
+AI Context Assistant helps you prepare code/text files for AI analysis by
+combining them into a single context-optimized file.
 
-================================================================================
-BASIC SETTINGS
-================================================================================
-• Output Folder: Select where generated files will be saved
-• File Extensions: Comma-separated list of file types to include (e.g., .txt, .py, .md)
-• Save Settings: Save your current configuration for future sessions
+Basic Process: Select folders → Configure settings → Generate output →
+               Review in Status Log → Send to AI
 
 ================================================================================
-PHASE 1 FEATURES - Essential Processing
+SECTION 1: FOLDERS - Managing Your Source Files
 ================================================================================
-✓ PII Sanitization
-  - Automatically redacts emails, API keys, passwords, and custom names
-  - Configurable custom names to sanitize (e.g., usernames)
-  - Shows redaction summary in logs
 
-✓ Binary File Detection
-  - Automatically skips binary files (images, executables, etc.)
-  - Prevents encoding errors and reduces output size
+📁 OUTPUT FOLDER & FILE EXTENSIONS
+------------------------------------
+"Browse..." button: Select where combined files will be saved
+File Extensions field: Specify which file types to include (e.g., .py, .js, .md)
+  • Separate multiple extensions with commas
+  • Include the dot (e.g., .txt not txt)
 
-✓ Token Counting & Cost Estimation
-  - Real-time token counting using tiktoken
-  - Estimated API costs for GPT-4o and other models
-  - Token budget progress bar with soft/hard limits
-  - Soft Limit: Warning threshold for token usage
-  - Hard Limit: Maximum token budget
+"Save Settings" button: Saves your configuration for next session
 
-✓ .gitignore / .gptignore Support
-  - Respects .gitignore patterns in source folders
-  - .gptignore takes precedence if present
-  - Helps exclude build files, dependencies, etc.
+🗂️ SOURCE FOLDERS TABLE
+-------------------------
+Displays all folders you've added with their output file names
+  • Select a row to highlight it
+  • Maximum 5 folders can be added
 
-✓ Copy to Clipboard
-  - Directly copy merged content to clipboard
-  - Useful for quick AI queries without saving files
+"Add Source Folder" button: Opens dialog to add a new folder
+  ① Click button
+  ② Click "Browse..." in dialog to select folder
+  ③ Configure options:
+     - Exclude subfolders: Only process files in root directory
+     - Include archive folder: Include files in /archive subdirectories
+  ④ Set output name (timestamp is automatically added)
+  ⑤ Click "OK" to add
 
-================================================================================
-PHASE 2 FEATURES - Output Optimization
-================================================================================
-✓ Skeleton Mode
-  - Extracts only class/function signatures from Python files
-  - Reduces token usage while preserving code structure
-  - Ideal for high-level code reviews and architecture discussions
+"Remove Selected" button: Removes the highlighted folder from the table
+  • Select a folder in the table first
+  • Confirms before removing
 
-✓ Directory Tree Visualization
-  - Includes a visual tree structure of all processed files
-  - Helps AI understand project organization
+"Generate Output Files" button: **MAIN ACTION** - Creates combined files
+  • Processes all folders in the table
+  • Creates one file per source folder
+  • Shows progress in Status Log
+  • Displays token count and estimated AI cost
 
-✓ Output Formats
-  - Standard: Traditional delimiter-based format
-  - XML: Optimized for Claude (with metadata tags)
-  - Markdown: Optimized for GPT (with syntax highlighting)
-
-✓ System Prompt Templates
-  - Prepend custom instructions to your context
-  - Pre-configured templates:
-    * Code Review: For reviewing code quality and best practices
-    * Documentation: For generating comprehensive docs
-    * Refactoring: For analyzing improvement opportunities
-  - Templates are included in the generated output
-
-✓ Project Profiles/Workspaces
-  - Save complete configurations as named profiles
-  - Quickly switch between different project setups
-  - Load/Save/Delete profiles
-  - Each profile stores:
-    * Source folders and their settings
-    * File extensions and filters
-    * All feature toggles
-    * System prompts
-    * Output preferences
+"Clear All Folders" button: Removes all folders from the table
+  • Use this to start fresh
+  • Asks for confirmation first
 
 ================================================================================
-PHASE 3 FEATURES - Advanced Filtering & Security
+SECTION 2: STATUS LOG - Monitoring Your Process
 ================================================================================
-✓ Safe Mode
-  - Automatically excludes sensitive files:
-    * Environment files (.env, secrets.json, credentials.yaml)
-    * SSH keys and certificates (.pem, .key, id_rsa)
-    * Database files (.db, .sqlite)
-    * API keys and tokens (api_keys.txt, .npmrc)
-    * Shell history files
-    * AWS credentials
-  - Prevents accidental inclusion of secrets in AI contexts
 
-✓ Semantic Minification
-  - Removes comments and extra whitespace
-  - Reduces token usage while preserving code logic
-  - Supports Python, JavaScript, TypeScript, Java, C/C++, Ruby, Bash
-  - Does NOT remove docstrings or code functionality
+This scrollable text area shows:
+  • What files are being processed
+  • Any errors or warnings
+  • Token counts and costs
+  • Success/failure messages
+  • Processing statistics
 
-✓ Enhanced Statistics
-  - Detailed file type breakdown
-  - Total size in KB and bytes
-  - Character and line counts
-  - Average tokens per file
-  - Compression ratio
-
-✓ Profile Import/Export
-  - Export all profiles to JSON file for backup
-  - Import profiles from other machines or team members
-  - Merge or replace existing profiles
-  - Share project configurations across teams
-
-✓ Advanced File Filtering
-  - Max File Size (KB): Exclude files larger than threshold
-  - Min File Size (KB): Exclude files smaller than threshold
-  - Modified After (YYYY-MM-DD): Only include recently modified files
-  - Useful for focusing on specific file types or recent changes
+TIP: Always check the Status Log after generating to ensure everything
+     processed correctly!
 
 ================================================================================
-SOURCE FOLDERS
+BASIC SETTINGS - Controlling File Processing
 ================================================================================
-• Add up to 5 source folders
-• Each folder has independent settings:
-  - Exclude Subfolders: Process only root-level files
-  - Include Archive Folder: Include files in "archive" directories
-  - Output Name: Custom name for the generated file (timestamp auto-added)
-• Browse button for easy folder selection
-• Remove individual folders or clear all at once
+
+☑️ Enable PII Sanitization: Automatically removes emails, API keys, passwords
+  • Protects sensitive information
+  • Shows what was redacted in logs
+
+☑️ Skip Binary Files: Ignores images, executables, etc.
+  • Prevents encoding errors
+  • Reduces file size
+
+Soft Limit / Hard Limit: Token budget controls
+  • Soft Limit: Warning when approaching limit
+  • Hard Limit: Maximum tokens to process
+  • Helps control AI API costs
+
+☑️ Respect .gitignore/.gptignore: Excludes files matching these patterns
+  • .gptignore takes priority if both exist
+  • Automatically excludes node_modules, __pycache__, etc.
 
 ================================================================================
-WORKFLOW
+OUTPUT OPTIONS - Customizing Your Output
 ================================================================================
-1. Configure Basic Settings (output folder, file extensions)
-2. Add one or more source folders
-3. Adjust Phase 1 settings (PII sanitization, token limits, etc.)
-4. Choose Phase 2 options (skeleton mode, output format, system prompt)
-5. Configure Phase 3 filters (Safe Mode, file size/date filters)
-6. Optionally save as a Profile for reuse
-7. Click "Generate Output Files" or "Copy to Clipboard"
-8. Review Status Log for processing details and statistics
+
+☑️ Skeleton Mode: Extracts only function/class signatures (Python files)
+  • Dramatically reduces tokens
+  • Great for code structure understanding
+
+☑️ Show Directory Tree: Includes visual file structure
+  • Helps AI understand project organization
+
+Output Format dropdown:
+  • Standard: Simple text format
+  • XML: Best for Claude AI (includes metadata tags)
+  • Markdown: Best for ChatGPT (syntax highlighting)
+
+Profile dropdown:
+  • Default: Standard configuration
+  • Create custom profiles for different projects
+
+"Load" button: Applies saved profile settings
+"Save As..." button: Saves current settings as new profile
+"Delete" button: Removes selected profile
+
+System Prompt Template: Pre-configured instructions for the AI
+  • None: No special instructions
+  • Code Review: Asks AI to review code quality
+  • Documentation: Asks AI to generate docs
+  • Refactoring: Asks AI for improvement suggestions
 
 ================================================================================
-TIPS & BEST PRACTICES
+FILE FILTERING & SECURITY - Advanced Controls
 ================================================================================
-• Use .gptignore files in your project to exclude build artifacts
-• Enable Safe Mode to prevent accidental secret exposure
-• Use Skeleton Mode for large codebases to reduce token usage
-• Save profiles for different use cases (code review vs documentation)
-• Check token counts before sending to expensive models
-• Use XML format for Claude, Markdown for GPT for optimal results
-• Apply file size filters to focus on specific components
-• Use System Prompt Templates to guide AI behavior
 
-================================================================================
-KEYBOARD SHORTCUTS
-================================================================================
-• Ctrl+S: Quick save settings (if implemented in your environment)
-• Tab: Navigate between fields
-• Enter: Confirm dialogs
+☑️ Safe Mode: **RECOMMENDED** - Automatically excludes sensitive files
+  • Blocks .env, secrets.json, credentials files
+  • Prevents SSH keys and certificates
+  • Excludes database files
+  • Stops API keys and tokens
 
-================================================================================
-TROUBLESHOOTING
-================================================================================
-Q: Source folders area is empty
-A: Make sure you've added folders using the "Add Folder" button
+☑️ Semantic Minify: Removes comments and whitespace
+  • Reduces tokens significantly
+  • Code remains functional
+  • Supports Python, JavaScript, TypeScript, Java, C++, Ruby, Bash
 
-Q: Token count seems high
-A: Try enabling Skeleton Mode or Semantic Minification
+☑️ Show Statistics: Displays detailed file processing stats
 
-Q: Some files are missing
-A: Check if they're excluded by .gitignore/.gptignore or Safe Mode
+"Import..." / "Export..." buttons: Share profiles with team
+  • Export: Saves all profiles to JSON file
+  • Import: Loads profiles from JSON file
 
-Q: Can't see all buttons
-A: Resize the window or use scrollbar for better viewing
+Max/Min File Size (KB): Only process files within size range
+  • Useful for excluding very large or very small files
 
-Q: Clipboard copy not working
-A: Ensure pyperclip is installed: pip install pyperclip
+Modified After (YYYY-MM-DD): Only include recently changed files
+  • Format: 2024-01-15
+  • Great for focusing on recent work
 
 ================================================================================
-For more information, visit:
-https://github.com/yourusername/ai-context-assistant
+ADDITIONAL ACTIONS
+================================================================================
+
+"Copy to Clipboard" button: Copies merged content to clipboard instead of file
+  • Fast way to paste directly into AI chat
+  • Shows token count and cost
+  • No file created
+
+"Help" button: Shows this help guide (you're reading it now!)
+
+================================================================================
+TYPICAL WORKFLOWS
+================================================================================
+
+🎯 SCENARIO 1: Quick Code Review
+---------------------------------
+1. Add your project folder as source
+2. Set file extensions to code files only (.py, .js, .java, etc.)
+3. Enable "Skeleton Mode" to reduce tokens
+4. Select "Code Review" system prompt
+5. Choose XML or Markdown format
+6. Click "Generate Output Files"
+7. Upload generated file to Claude/ChatGPT
+
+🎯 SCENARIO 2: Documentation Generation
+---------------------------------------
+1. Add your source code folder
+2. Include .py, .md files
+3. Enable "PII Sanitization" and "Safe Mode"
+4. Select "Documentation" system prompt
+5. Enable "Show Directory Tree"
+6. Click "Generate Output Files"
+7. Give file to AI for documentation
+
+🎯 SCENARIO 3: Large Codebase Analysis
+--------------------------------------
+1. Add main source folder (exclude node_modules via .gptignore)
+2. Enable "Skeleton Mode" (reduces tokens by 70-90%)
+3. Enable "Semantic Minify"
+4. Set hard token limit to your AI's max (e.g., 128000)
+5. Check Status Log for token count
+6. If too large, split into multiple folders
+
+🎯 SCENARIO 4: Quick Question About Recent Changes
+--------------------------------------------------
+1. Add project folder
+2. Set "Modified After" to last week
+3. Click "Copy to Clipboard"
+4. Paste directly into AI chat
+5. Ask your question
+
+================================================================================
+BEST PRACTICES
+================================================================================
+
+✓ Always enable "Safe Mode" to prevent leaking secrets
+✓ Use .gptignore files to exclude build artifacts, node_modules, etc.
+✓ Check token count before sending to expensive models
+✓ Use Skeleton Mode for initial code understanding
+✓ Save profiles for different projects/use cases
+✓ Review Status Log after each generation
+✓ Use XML format for Claude, Markdown for ChatGPT
+✓ Set appropriate token limits to control costs
+✓ Use System Prompts to guide AI behavior
+✓ Test with small folders first before processing large projects
+
+================================================================================
+COMMON ISSUES
+================================================================================
+
+❌ "No files were processed"
+   → Check file extensions match your files
+   → Verify folder path is correct
+   → Check if .gitignore is excluding everything
+
+❌ Token count too high
+   → Enable Skeleton Mode
+   → Enable Semantic Minify
+   → Split into multiple smaller folders
+   → Use file size filters
+
+❌ Missing expected files
+   → Check .gitignore/.gptignore patterns
+   → Disable Safe Mode temporarily to test
+   → Verify file extensions are correct
+
+❌ Can't find generated file
+   → Check Output Folder path
+   → Look for timestamp in filename
+   → Check Status Log for errors
+
+================================================================================
+PRO TIPS
+================================================================================
+
+💡 Create profiles for different scenarios:
+   • "Quick Review" - Skeleton mode, minimal settings
+   • "Full Analysis" - All code, with comments
+   • "Documentation" - Code + markdown files
+
+💡 Use file size filters to focus on specific components:
+   • Min 1 KB: Exclude empty/template files
+   • Max 100 KB: Focus on smaller modules
+
+💡 Combine with .gptignore for precise control:
+   • Create .gptignore in your project root
+   • List patterns to exclude (one per line)
+   • Example: tests/, *.test.js, build/
+
+💡 Check costs before processing:
+   • Generate output
+   • Note token count in Status Log
+   • Calculate: tokens × $0.01/1000 (GPT-4)
+
 ================================================================================
 """
 
