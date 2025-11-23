@@ -2,15 +2,181 @@
 Text File Merger - GUI Application
 Combines multiple text files from selected folders into single output files
 with clear delimiters and timestamps.
+
+Phase 1 Features:
+- Token counting and cost estimation
+- Binary file detection
+- .gptignore/.gitignore support
+- PII sanitization
+- Copy to clipboard
 """
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import os
 import json
+import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
+
+# Phase 1 dependencies
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+    print("Warning: tiktoken not available. Token counting disabled.")
+
+try:
+    import pyperclip
+    PYPERCLIP_AVAILABLE = True
+except ImportError:
+    PYPERCLIP_AVAILABLE = False
+    print("Warning: pyperclip not available. Clipboard features disabled.")
+
+try:
+    import pathspec
+    PATHSPEC_AVAILABLE = True
+except ImportError:
+    PATHSPEC_AVAILABLE = False
+    print("Warning: pathspec not available. .gitignore support disabled.")
+
+
+# ============================================================================
+# Phase 1 Utility Functions
+# ============================================================================
+
+def is_binary_file(file_path: Path) -> bool:
+    """
+    Detect if a file is binary by checking for NULL bytes.
+
+    Args:
+        file_path: Path to the file to check
+
+    Returns:
+        True if file appears to be binary, False otherwise
+    """
+    try:
+        with open(file_path, 'rb') as f:
+            chunk = f.read(1024)  # Read first 1KB
+            return b'\x00' in chunk
+    except Exception:
+        return True  # If we can't read it, treat as binary
+
+
+def sanitize_pii(content: str, custom_names: List[str] = None) -> Tuple[str, List[str]]:
+    """
+    Sanitize PII from content including emails, usernames, and passwords.
+
+    Args:
+        content: The text content to sanitize
+        custom_names: List of custom names/usernames to replace (e.g., ['davidyu', 'david yu'])
+
+    Returns:
+        Tuple of (sanitized_content, list of redactions made)
+    """
+    redactions = []
+    sanitized = content
+
+    # Default names to sanitize
+    if custom_names is None:
+        custom_names = []
+
+    # Add default patterns
+    default_names = ['davidyu', 'david yu']
+    all_names = list(set(default_names + custom_names))
+
+    # Replace custom names (case-insensitive)
+    for i, name in enumerate(all_names, 1):
+        pattern = re.compile(re.escape(name), re.IGNORECASE)
+        if pattern.search(sanitized):
+            sanitized = pattern.sub(f'<USER_{i}>', sanitized)
+            redactions.append(f"Replaced '{name}' with <USER_{i}>")
+
+    # Email addresses
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    emails = re.findall(email_pattern, sanitized)
+    if emails:
+        sanitized = re.sub(email_pattern, '<EMAIL_ADDRESS>', sanitized)
+        redactions.append(f"Redacted {len(set(emails))} email address(es)")
+
+    # API Keys (common patterns)
+    api_patterns = [
+        (r'\bsk-[A-Za-z0-9]{48}\b', 'OpenAI API key'),
+        (r'\bAKIA[0-9A-Z]{16}\b', 'AWS Access Key'),
+        (r'\bxoxb-[0-9]+-[0-9]+-[A-Za-z0-9]+\b', 'Slack Bot Token'),
+        (r'\bghp_[A-Za-z0-9]{36}\b', 'GitHub Personal Access Token'),
+    ]
+
+    for pattern, key_type in api_patterns:
+        if re.search(pattern, sanitized):
+            sanitized = re.sub(pattern, '<REDACTED_API_KEY>', sanitized)
+            redactions.append(f"Redacted {key_type}")
+
+    # Generic high-entropy strings that look like passwords/secrets (basic heuristic)
+    # Look for strings like password=xxx, pwd=xxx, secret=xxx
+    password_patterns = [
+        r'(password|pwd|passwd|pass)\s*[=:]\s*["\']?([A-Za-z0-9!@#$%^&*()_+\-=\[\]{};:,.<>?]{8,})["\']?',
+        r'(secret|token|key)\s*[=:]\s*["\']?([A-Za-z0-9!@#$%^&*()_+\-=\[\]{};:,.<>?]{16,})["\']?',
+    ]
+
+    for pattern in password_patterns:
+        matches = re.findall(pattern, sanitized, re.IGNORECASE)
+        if matches:
+            sanitized = re.sub(pattern, r'\1=<REDACTED_SECRET>', sanitized, flags=re.IGNORECASE)
+            redactions.append(f"Redacted {len(matches)} password/secret assignment(s)")
+
+    return sanitized, redactions
+
+
+def count_tokens(text: str, model: str = "gpt-4") -> int:
+    """
+    Count tokens in text using tiktoken.
+
+    Args:
+        text: The text to count tokens for
+        model: The model to use for tokenization (gpt-4, gpt-3.5-turbo, etc.)
+
+    Returns:
+        Number of tokens, or character count / 4 if tiktoken unavailable
+    """
+    if not TIKTOKEN_AVAILABLE:
+        # Rough approximation: 1 token ≈ 4 characters
+        return len(text) // 4
+
+    try:
+        # Use cl100k_base encoding (used by GPT-4, GPT-3.5-turbo)
+        encoding = tiktoken.get_encoding("cl100k_base")
+        return len(encoding.encode(text))
+    except Exception as e:
+        print(f"Token counting error: {e}")
+        return len(text) // 4
+
+
+def estimate_cost(token_count: int, model: str = "gpt-4o") -> Tuple[float, str]:
+    """
+    Estimate API cost based on token count.
+
+    Args:
+        token_count: Number of input tokens
+        model: Model name for pricing
+
+    Returns:
+        Tuple of (cost in USD, model name)
+    """
+    # Pricing per 1M tokens (as of 2024)
+    pricing = {
+        "gpt-4o": 2.50,
+        "gpt-4o-mini": 0.15,
+        "claude-3.5-sonnet": 3.00,
+        "claude-3-opus": 15.00,
+    }
+
+    cost_per_million = pricing.get(model, 2.50)
+    cost = (token_count / 1_000_000) * cost_per_million
+
+    return cost, model
 
 
 class Config:
@@ -45,7 +211,15 @@ class Config:
         return {
             "output_folder": "",
             "file_extensions": ".txt, .py, .md, .json, .xml, .csv",
-            "source_folders": []
+            "source_folders": [],
+            # Phase 1 settings
+            "enable_pii_sanitization": True,
+            "custom_sanitize_names": ["davidyu", "david yu"],
+            "target_model": "gpt-4o",
+            "enable_binary_detection": True,
+            "token_soft_limit": 32000,
+            "token_hard_limit": 128000,
+            "respect_gitignore": True,
         }
 
     def get(self, key: str, default=None):
@@ -203,6 +377,59 @@ class TextFileMergerApp:
         ttk.Button(settings_frame, text="Save Settings",
                   command=self.save_settings).pack(pady=(5, 0))
 
+        # Phase 1 Features Section
+        phase1_frame = ttk.LabelFrame(main_container, text="Phase 1 Features", padding="10")
+        phase1_frame.pack(fill=tk.X, pady=(0, 10))
+
+        # Row 1: Model selection and PII sanitization
+        row1_frame = ttk.Frame(phase1_frame)
+        row1_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(row1_frame, text="Target Model:").pack(side=tk.LEFT)
+        self.target_model = tk.StringVar(value=self.config.get("target_model", "gpt-4o"))
+        model_combo = ttk.Combobox(row1_frame, textvariable=self.target_model,
+                                   values=["gpt-4o", "gpt-4o-mini", "claude-3.5-sonnet", "claude-3-opus"],
+                                   state='readonly', width=20)
+        model_combo.pack(side=tk.LEFT, padx=5)
+
+        self.enable_pii = tk.BooleanVar(value=self.config.get("enable_pii_sanitization", True))
+        ttk.Checkbutton(row1_frame, text="Enable PII Sanitization",
+                       variable=self.enable_pii).pack(side=tk.LEFT, padx=15)
+
+        self.enable_binary_detect = tk.BooleanVar(value=self.config.get("enable_binary_detection", True))
+        ttk.Checkbutton(row1_frame, text="Skip Binary Files",
+                       variable=self.enable_binary_detect).pack(side=tk.LEFT)
+
+        # Row 2: Token limits
+        row2_frame = ttk.Frame(phase1_frame)
+        row2_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(row2_frame, text="Soft Limit:").pack(side=tk.LEFT)
+        self.token_soft_limit = tk.StringVar(value=str(self.config.get("token_soft_limit", 32000)))
+        ttk.Entry(row2_frame, textvariable=self.token_soft_limit, width=10).pack(side=tk.LEFT, padx=5)
+
+        ttk.Label(row2_frame, text="Hard Limit:").pack(side=tk.LEFT, padx=(10, 0))
+        self.token_hard_limit = tk.StringVar(value=str(self.config.get("token_hard_limit", 128000)))
+        ttk.Entry(row2_frame, textvariable=self.token_hard_limit, width=10).pack(side=tk.LEFT, padx=5)
+
+        self.respect_gitignore = tk.BooleanVar(value=self.config.get("respect_gitignore", True))
+        ttk.Checkbutton(row2_frame, text="Respect .gitignore/.gptignore",
+                       variable=self.respect_gitignore).pack(side=tk.LEFT, padx=15)
+
+        # Row 3: Token budget display
+        budget_frame = ttk.Frame(phase1_frame)
+        budget_frame.pack(fill=tk.X, pady=(5, 0))
+
+        ttk.Label(budget_frame, text="Token Budget:").pack(side=tk.LEFT)
+
+        # Progress bar for token budget
+        self.token_progress = ttk.Progressbar(budget_frame, length=300, mode='determinate')
+        self.token_progress.pack(side=tk.LEFT, padx=5)
+
+        # Token count and cost label
+        self.token_info_label = ttk.Label(budget_frame, text="0 tokens ($0.00)")
+        self.token_info_label.pack(side=tk.LEFT, padx=5)
+
         # Source Folders Section
         folders_container = ttk.LabelFrame(main_container, text="Source Folders",
                                           padding="10")
@@ -247,6 +474,12 @@ class TextFileMergerApp:
         ttk.Button(action_frame, text="Generate Output Files",
                   command=self.generate_outputs,
                   style='Accent.TButton').pack(side=tk.LEFT, padx=5)
+
+        # Add Copy to Clipboard button (Phase 1)
+        if PYPERCLIP_AVAILABLE:
+            ttk.Button(action_frame, text="Copy to Clipboard",
+                      command=self.copy_to_clipboard).pack(side=tk.LEFT, padx=5)
+
         ttk.Button(action_frame, text="Clear All Folders",
                   command=self.clear_all_folders).pack(side=tk.LEFT)
 
@@ -270,6 +503,19 @@ class TextFileMergerApp:
         """Save current settings to config"""
         self.config.set("output_folder", self.output_folder.get())
         self.config.set("file_extensions", self.file_extensions.get())
+
+        # Save Phase 1 settings
+        self.config.set("target_model", self.target_model.get())
+        self.config.set("enable_pii_sanitization", self.enable_pii.get())
+        self.config.set("enable_binary_detection", self.enable_binary_detect.get())
+        self.config.set("respect_gitignore", self.respect_gitignore.get())
+
+        try:
+            self.config.set("token_soft_limit", int(self.token_soft_limit.get()))
+            self.config.set("token_hard_limit", int(self.token_hard_limit.get()))
+        except ValueError:
+            self.log("Warning: Invalid token limit values, using defaults")
+
         self.save_source_folders()
         self.log("Settings saved successfully")
         messagebox.showinfo("Settings", "Settings saved successfully!")
@@ -357,6 +603,33 @@ class TextFileMergerApp:
         # Ensure extensions start with a dot
         return [ext if ext.startswith('.') else f'.{ext}' for ext in extensions if ext]
 
+    def load_ignore_patterns(self, folder_path: Path) -> Optional['pathspec.PathSpec']:
+        """
+        Load .gptignore or .gitignore patterns from folder.
+
+        Args:
+            folder_path: The folder to check for ignore files
+
+        Returns:
+            PathSpec object or None if no ignore file found
+        """
+        if not PATHSPEC_AVAILABLE or not self.respect_gitignore.get():
+            return None
+
+        # Check for .gptignore first, then .gitignore
+        for ignore_file in ['.gptignore', '.gitignore']:
+            ignore_path = folder_path / ignore_file
+            if ignore_path.exists():
+                try:
+                    with open(ignore_path, 'r') as f:
+                        patterns = f.read().splitlines()
+                    self.log(f"  Loaded {len(patterns)} patterns from {ignore_file}")
+                    return pathspec.PathSpec.from_lines('gitwildmatch', patterns)
+                except Exception as e:
+                    self.log(f"  Error loading {ignore_file}: {e}")
+
+        return None
+
     def _is_in_archive_folder(self, file_path: Path) -> bool:
         """Check if a file is within an archive folder"""
         # Check if any parent directory is named 'archive' or 'archived'
@@ -366,77 +639,134 @@ class TextFileMergerApp:
         return False
 
     def collect_files(self, folder_path: str, exclude_subfolders: bool,
-                     extensions: List[str], include_archive: bool = False) -> List[Path]:
-        """Collect all files from folder matching extensions"""
+                     extensions: List[str], include_archive: bool = False) -> Tuple[List[Path], List[str]]:
+        """
+        Collect all files from folder matching extensions with Phase 1 filtering.
+
+        Returns:
+            Tuple of (list of valid files, list of skipped file reasons)
+        """
         files = []
+        skipped = []
         folder = Path(folder_path)
+
+        # Load ignore patterns
+        ignore_spec = self.load_ignore_patterns(folder)
 
         if exclude_subfolders:
             # Only get files in the root folder
-            for file_path in folder.iterdir():
-                if file_path.is_file() and file_path.suffix.lower() in extensions:
-                    files.append(file_path)
+            candidate_files = [f for f in folder.iterdir() if f.is_file()]
         else:
             # Recursively get all files
+            candidate_files = []
             for ext in extensions:
-                files.extend(folder.rglob(f"*{ext}"))
+                candidate_files.extend(folder.rglob(f"*{ext}"))
 
-        # Filter out archive folders unless include_archive is True
-        if not include_archive:
-            files = [f for f in files if not self._is_in_archive_folder(f)]
+        # Filter files based on Phase 1 criteria
+        for file_path in candidate_files:
+            # Check extension
+            if file_path.suffix.lower() not in extensions:
+                continue
 
-        return sorted(files)
+            # Check archive folder
+            if not include_archive and self._is_in_archive_folder(file_path):
+                skipped.append(f"{file_path.name} (in archive folder)")
+                continue
 
-    def merge_files(self, files: List[Path], output_path: str, source_folder: str) -> bool:
-        """Merge multiple files into one with delimiters"""
+            # Check gitignore patterns
+            if ignore_spec:
+                try:
+                    relative_path = file_path.relative_to(folder)
+                    if ignore_spec.match_file(str(relative_path)):
+                        skipped.append(f"{file_path.name} (matched .gitignore/.gptignore)")
+                        continue
+                except ValueError:
+                    pass
+
+            # Check if binary
+            if self.enable_binary_detect.get() and is_binary_file(file_path):
+                skipped.append(f"{file_path.name} (binary file)")
+                continue
+
+            files.append(file_path)
+
+        return sorted(files), skipped
+
+    def merge_files(self, files: List[Path], output_path: str, source_folder: str) -> Tuple[bool, str, int, List[str]]:
+        """
+        Merge multiple files into one with delimiters, PII sanitization, and token counting.
+
+        Returns:
+            Tuple of (success, merged_content, token_count, pii_redactions)
+        """
         try:
             source_path = Path(source_folder)
-            # Get the top folder name (last component of the source path)
             top_folder = source_path.name
+            all_redactions = []
+            merged_content = ""
 
-            with open(output_path, 'w', encoding='utf-8', errors='ignore') as outfile:
-                outfile.write(f"Generated by AI Context Assistant\n")
-                outfile.write(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-                outfile.write(f"Total files: {len(files)}\n")
-                outfile.write("\n" + "="*80 + "\n\n")
+            # Build header
+            header = f"Generated by AI Context Assistant\n"
+            header += f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            header += f"Total files: {len(files)}\n"
+            header += f"Target Model: {self.target_model.get()}\n"
+            if self.enable_pii.get():
+                header += "PII Sanitization: ENABLED\n"
+            header += "\n" + "="*80 + "\n\n"
 
-                for file_path in files:
+            merged_content = header
+
+            for file_path in files:
+                try:
+                    # Calculate relative path from source folder
                     try:
-                        # Calculate relative path from source folder
-                        try:
-                            relative_path = file_path.relative_to(source_path)
-                            # Prepend the top folder name to show the structure
-                            display_path = f"{top_folder}/{relative_path}"
-                        except ValueError:
-                            # If file is not relative to source_path, use the filename
-                            display_path = f"{top_folder}/{file_path.name}"
+                        relative_path = file_path.relative_to(source_path)
+                        display_path = f"{top_folder}/{relative_path}"
+                    except ValueError:
+                        display_path = f"{top_folder}/{file_path.name}"
 
-                        # Write file header
-                        outfile.write("="*80 + "\n")
-                        outfile.write(f"BEGIN FILE: {display_path}\n")
-                        outfile.write("="*80 + "\n")
+                    # Read file content
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
+                        content = infile.read()
 
-                        # Write file content
-                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as infile:
-                            content = infile.read()
-                            outfile.write(content)
-                            # Ensure file ends with newline
-                            if content and not content.endswith('\n'):
-                                outfile.write('\n')
+                    # Apply PII sanitization if enabled
+                    if self.enable_pii.get():
+                        custom_names = self.config.get("custom_sanitize_names", ["davidyu", "david yu"])
+                        content, redactions = sanitize_pii(content, custom_names)
+                        if redactions:
+                            all_redactions.extend([f"{display_path}: {r}" for r in redactions])
 
-                        # Write file footer
-                        outfile.write("="*80 + "\n")
-                        outfile.write(f"END FILE: {display_path}\n")
-                        outfile.write("="*80 + "\n\n")
+                    # Write file header
+                    merged_content += "="*80 + "\n"
+                    merged_content += f"BEGIN FILE: {display_path}\n"
+                    merged_content += "="*80 + "\n"
+                    merged_content += content
 
-                    except Exception as e:
-                        self.log(f"Error reading {file_path}: {e}")
-                        continue
+                    # Ensure file ends with newline
+                    if content and not content.endswith('\n'):
+                        merged_content += '\n'
 
-            return True
+                    # Write file footer
+                    merged_content += "="*80 + "\n"
+                    merged_content += f"END FILE: {display_path}\n"
+                    merged_content += "="*80 + "\n\n"
+
+                except Exception as e:
+                    self.log(f"Error reading {file_path}: {e}")
+                    continue
+
+            # Count tokens
+            token_count = count_tokens(merged_content, self.target_model.get())
+
+            # Write to file
+            with open(output_path, 'w', encoding='utf-8', errors='ignore') as outfile:
+                outfile.write(merged_content)
+
+            return True, merged_content, token_count, all_redactions
+
         except Exception as e:
             self.log(f"Error writing output file: {e}")
-            return False
+            return False, "", 0, []
 
     def generate_outputs(self):
         """Generate output files for all configured folders"""
@@ -476,6 +806,8 @@ class TextFileMergerApp:
         self.log("="*60)
 
         success_count = 0
+        total_tokens = 0
+        total_redactions = []
 
         # Process each folder
         for i, config in enumerate(folder_configs, 1):
@@ -488,8 +820,15 @@ class TextFileMergerApp:
             self.log(f"  Exclude subfolders: {exclude_subfolders}")
             self.log(f"  Include archive folder: {include_archive}")
 
-            # Collect files
-            files = self.collect_files(folder_path, exclude_subfolders, extensions, include_archive)
+            # Collect files (Phase 1: with binary detection and gitignore support)
+            files, skipped = self.collect_files(folder_path, exclude_subfolders, extensions, include_archive)
+
+            if skipped:
+                self.log(f"  Skipped {len(skipped)} file(s):")
+                for skip_reason in skipped[:5]:  # Show first 5
+                    self.log(f"    - {skip_reason}")
+                if len(skipped) > 5:
+                    self.log(f"    ... and {len(skipped) - 5} more")
 
             if not files:
                 self.log(f"  Warning: No matching files found")
@@ -502,10 +841,25 @@ class TextFileMergerApp:
             output_filename = f"{output_name}_{timestamp}.txt"
             output_path = os.path.join(self.output_folder.get(), output_filename)
 
-            # Merge files
-            if self.merge_files(files, output_path, folder_path):
+            # Merge files (Phase 1: with PII sanitization and token counting)
+            success, content, token_count, redactions = self.merge_files(files, output_path, folder_path)
+
+            if success:
+                # Calculate cost
+                cost, model = estimate_cost(token_count, self.target_model.get())
+
                 self.log(f"  Success: Created {output_filename}")
+                self.log(f"  Tokens: {token_count:,} | Estimated cost: ${cost:.4f} ({model})")
+
+                if redactions:
+                    self.log(f"  PII Redactions: {len(redactions)} item(s)")
+                    total_redactions.extend(redactions)
+
+                total_tokens += token_count
                 success_count += 1
+
+                # Update token budget display
+                self.update_token_budget(total_tokens)
             else:
                 self.log(f"  Error: Failed to create output file")
 
@@ -519,6 +873,124 @@ class TextFileMergerApp:
         messagebox.showinfo("Complete",
                           f"Generated {success_count} output file(s)\n"
                           f"Location: {self.output_folder.get()}")
+
+    def update_token_budget(self, token_count: int):
+        """Update the token budget progress bar and label"""
+        try:
+            soft_limit = int(self.token_soft_limit.get())
+            hard_limit = int(self.token_hard_limit.get())
+        except ValueError:
+            soft_limit = 32000
+            hard_limit = 128000
+
+        # Calculate cost
+        cost, model = estimate_cost(token_count, self.target_model.get())
+
+        # Update label
+        self.token_info_label.config(text=f"{token_count:,} tokens (${cost:.4f})")
+
+        # Update progress bar (based on hard limit)
+        percentage = min(100, (token_count / hard_limit) * 100)
+        self.token_progress['value'] = percentage
+
+        # Change color based on limits (requires style configuration)
+        # This is a simple visual indicator
+        self.root.update_idletasks()
+
+    def copy_to_clipboard(self):
+        """Copy merged content to clipboard (Phase 1 feature)"""
+        if not PYPERCLIP_AVAILABLE:
+            messagebox.showerror("Error", "Clipboard functionality not available.\n"
+                                         "Install pyperclip: pip install pyperclip")
+            return
+
+        # Validate settings
+        if not self.folder_entries:
+            messagebox.showwarning("No Folders", "Please add at least one source folder")
+            return
+
+        # Get valid folder configurations
+        folder_configs = []
+        for entry in self.folder_entries:
+            config = entry.get_config()
+            if config:
+                folder_configs.append(config)
+
+        if not folder_configs:
+            messagebox.showwarning("No Folders", "Please configure at least one source folder")
+            return
+
+        # Get file extensions
+        extensions = self.get_file_extensions()
+        if not extensions:
+            messagebox.showerror("Error", "Please specify at least one file extension")
+            return
+
+        self.log("="*60)
+        self.log("Copying to clipboard...")
+        self.log("="*60)
+
+        all_content = ""
+        total_tokens = 0
+        total_files = 0
+
+        # Process each folder
+        for i, config in enumerate(folder_configs, 1):
+            folder_path = config['folder_path']
+            exclude_subfolders = config['exclude_subfolders']
+            include_archive = config.get('include_archive', False)
+
+            self.log(f"\n[{i}/{len(folder_configs)}] Processing: {folder_path}")
+
+            # Collect files
+            files, skipped = self.collect_files(folder_path, exclude_subfolders, extensions, include_archive)
+
+            if not files:
+                self.log(f"  Warning: No matching files found")
+                continue
+
+            self.log(f"  Found {len(files)} file(s)")
+            total_files += len(files)
+
+            # Create temporary output to get merged content
+            temp_output = os.path.join(self.output_folder.get() or ".", "temp_clipboard.txt")
+            success, content, token_count, redactions = self.merge_files(files, temp_output, folder_path)
+
+            if success:
+                all_content += content + "\n\n"
+                total_tokens += token_count
+
+                # Clean up temp file
+                try:
+                    os.remove(temp_output)
+                except:
+                    pass
+
+        if all_content:
+            try:
+                pyperclip.copy(all_content)
+                cost, model = estimate_cost(total_tokens, self.target_model.get())
+
+                self.log("="*60)
+                self.log(f"SUCCESS: Copied to clipboard!")
+                self.log(f"Total files: {total_files}")
+                self.log(f"Total tokens: {total_tokens:,}")
+                self.log(f"Estimated cost: ${cost:.4f} ({model})")
+                self.log("="*60)
+
+                # Update token budget display
+                self.update_token_budget(total_tokens)
+
+                messagebox.showinfo("Copied!",
+                                  f"Successfully copied {total_files} file(s) to clipboard!\n\n"
+                                  f"Tokens: {total_tokens:,}\n"
+                                  f"Estimated cost: ${cost:.4f} ({model})")
+            except Exception as e:
+                self.log(f"Error copying to clipboard: {e}")
+                messagebox.showerror("Error", f"Failed to copy to clipboard:\n{e}")
+        else:
+            self.log("No content to copy")
+            messagebox.showwarning("No Content", "No files were processed")
 
 
 def main():

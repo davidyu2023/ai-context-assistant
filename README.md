@@ -1,10 +1,11 @@
 # AI Context Assistant - Text File Merger
 
-A Windows GUI application for combining multiple text files into a single file, making it easier to include them as attachments for AI prompts.
+A cross-platform GUI application for combining multiple text files into a single file optimized for AI prompts, with advanced features for token counting, cost estimation, PII sanitization, and more.
 
 ## Features
 
-- **GUI Interface**: User-friendly Windows interface built with tkinter
+### Core Features
+- **GUI Interface**: User-friendly interface built with tkinter
 - **Multiple Folder Support**: Process up to 5 source folders simultaneously
 - **Subfolder Control**: Option to exclude nested subfolders during processing
 - **File Extension Filtering**: Specify which file extensions to include (e.g., .txt, .py, .md)
@@ -12,10 +13,38 @@ A Windows GUI application for combining multiple text files into a single file, 
 - **Timestamped Output**: Automatically adds timestamps to output filenames
 - **Clear File Markers**: Each source file is clearly marked with begin/end delimiters in the output
 
+### Phase 1 Features (NEW!)
+
+#### 🎯 Token Counting & Cost Estimation
+- **Real-time Token Counting**: Uses `tiktoken` for accurate token counting compatible with GPT-4, GPT-3.5-turbo, and Claude models
+- **Cost Calculator**: Displays estimated API costs based on current pricing for different models
+- **Visual Token Budget**: Progress bar showing token usage against configurable soft/hard limits
+- **Model Selection**: Choose target model (GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, Claude 3 Opus)
+
+#### 🔒 Security & Privacy
+- **PII Sanitization**: Automatically redacts emails, usernames, and sensitive information
+- **Custom Name Redaction**: Replace specific names/usernames (e.g., "davidyu", "david yu") with placeholders
+- **API Key Detection**: Identifies and redacts common API key patterns (OpenAI, AWS, Slack, GitHub)
+- **Password Protection**: Detects and redacts password assignments in code
+
+#### 🚫 Smart File Filtering
+- **Binary File Detection**: Automatically skips binary files (images, executables, etc.)
+- **.gitignore/.gptignore Support**: Respects ignore patterns from `.gitignore` or `.gptignore` files
+- **Archive Folder Exclusion**: Option to exclude archive folders from processing
+- **Detailed Skip Reports**: Shows which files were skipped and why
+
+#### 📋 Clipboard Integration
+- **Copy to Clipboard**: One-click copy of merged content directly to clipboard
+- **Toast Notifications**: Shows token count and cost when copying
+- **No Intermediate Files**: Skip file generation and paste directly into AI chat
+
 ## Requirements
 
 - Python 3.7 or higher
-- tkinter (usually included with Python on Windows)
+- tkinter (usually included with Python on Windows and most Linux distributions)
+- tiktoken (for token counting)
+- pyperclip (for clipboard support)
+- pathspec (for .gitignore support)
 
 ## Installation
 
@@ -30,7 +59,14 @@ cd ai-context-assistant
 pip install -r requirements.txt
 ```
 
+The required packages are:
+- `tiktoken>=0.5.0` - Token counting for various LLM models
+- `pyperclip>=1.8.0` - Clipboard integration
+- `pathspec>=0.11.0` - .gitignore/.gptignore pattern matching
+
 ## Usage
+
+### Basic Usage
 
 1. Run the application:
 ```bash
@@ -49,25 +85,87 @@ python text_file_merger.py
 
 4. Click "Generate Output Files" to create the merged files
 
+### Phase 1 Features Usage
+
+#### Token Budget Configuration
+1. Select your **Target Model** from the dropdown (GPT-4o, GPT-4o-mini, Claude 3.5 Sonnet, etc.)
+2. Set **Soft Limit** (warning threshold) and **Hard Limit** (maximum tokens)
+3. The progress bar will show real-time token usage and estimated costs
+
+#### PII Sanitization
+1. Check **"Enable PII Sanitization"** to automatically redact sensitive information
+2. Default redactions include:
+   - Emails (e.g., `user@example.com` → `<EMAIL_ADDRESS>`)
+   - Usernames (e.g., `davidyu`, `david yu` → `<USER_1>`, `<USER_2>`)
+   - API keys (OpenAI, AWS, Slack, GitHub)
+   - Password assignments in code
+3. Custom names can be configured in `config.json`
+
+#### Smart File Filtering
+1. Check **"Skip Binary Files"** to automatically exclude images, executables, etc.
+2. Check **"Respect .gitignore/.gptignore"** to use ignore patterns
+3. Create a `.gptignore` file in your project root (see `.gptignore.example`)
+4. Archive folders can be excluded/included per folder
+
+#### Clipboard Integration
+1. Configure your folders and settings as usual
+2. Click **"Copy to Clipboard"** instead of "Generate Output Files"
+3. Content is copied directly to clipboard with token count and cost displayed
+4. Paste directly into ChatGPT, Claude, or any AI chat interface
+
 ## Output Format
 
-Each output file contains all text files from the source folder with clear delimiters:
+Each output file contains metadata and all text files from the source folder with clear delimiters:
 
 ```
+Generated by AI Context Assistant
+Timestamp: 2025-11-23 14:30:00
+Total files: 15
+Target Model: gpt-4o
+PII Sanitization: ENABLED
+
 ================================================================================
-BEGIN FILE: path/to/file.txt
+
 ================================================================================
-[file content here]
+BEGIN FILE: project_name/path/to/file.txt
 ================================================================================
-END FILE: path/to/file.txt
+[file content here - with PII redacted if enabled]
+================================================================================
+END FILE: project_name/path/to/file.txt
 ================================================================================
 ```
 
 ## Configuration
 
 Settings are automatically saved to `config.json` in the application directory and include:
+
+### Basic Settings
 - Last used output folder path
 - Preferred file extensions
+- Source folder configurations
+
+### Phase 1 Settings
+- `enable_pii_sanitization`: Enable/disable PII redaction (default: `true`)
+- `custom_sanitize_names`: List of custom names to redact (default: `["davidyu", "david yu"]`)
+- `target_model`: Target LLM model for token counting (default: `"gpt-4o"`)
+- `enable_binary_detection`: Skip binary files (default: `true`)
+- `token_soft_limit`: Warning threshold in tokens (default: `32000`)
+- `token_hard_limit`: Maximum token limit (default: `128000`)
+- `respect_gitignore`: Use .gitignore/.gptignore patterns (default: `true`)
+
+### Example config.json
+```json
+{
+  "output_folder": "/path/to/output",
+  "file_extensions": ".txt, .py, .md, .json",
+  "enable_pii_sanitization": true,
+  "custom_sanitize_names": ["davidyu", "david yu", "mycompany"],
+  "target_model": "gpt-4o",
+  "token_soft_limit": 32000,
+  "token_hard_limit": 128000,
+  "respect_gitignore": true
+}
+```
 
 ## Building Executable (Optional)
 
