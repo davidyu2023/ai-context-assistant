@@ -1283,6 +1283,7 @@ class TextFileMergerApp:
                 result['output_name']
             ))
             self.update_folder_count()
+            self.save_source_folders()
             self.log(f"Added folder: {result['folder_path']}")
 
     def remove_selected_folder(self):
@@ -1301,6 +1302,7 @@ class TextFileMergerApp:
         if 0 <= index < len(self.folder_entries):
             removed = self.folder_entries.pop(index)
             self.update_folder_count()
+            self.save_source_folders()
             self.log(f"Removed folder: {removed.get('folder_path', '')}")
 
     def clear_all_folders(self):
@@ -1315,6 +1317,7 @@ class TextFileMergerApp:
                 self.folders_tree.delete(item)
             self.folder_entries.clear()
             self.update_folder_count()
+            self.save_source_folders()
             self.log("All folder entries cleared")
 
     def update_folder_count(self):
