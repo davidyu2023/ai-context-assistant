@@ -900,6 +900,11 @@ class TextFileMergerApp:
     def setup_gui(self):
         """Setup the GUI components"""
 
+        # Configure custom button styles
+        style = ttk.Style()
+        style.configure('AddFolder.TButton', background='#4CAF50', foreground='green')
+        style.configure('Generate.TButton', background='#2196F3', foreground='blue')
+
         # Main container with scrollbar
         main_container = ttk.Frame(self.root)
         main_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -960,7 +965,8 @@ class TextFileMergerApp:
         button_frame.pack(fill=tk.X, pady=(5, 5))
 
         self.add_folder_btn = ttk.Button(button_frame, text="Add Source Folder",
-                                         command=self.add_folder_entry)
+                                         command=self.add_folder_entry,
+                                         style='AddFolder.TButton')
         self.add_folder_btn.pack(side=tk.LEFT, padx=(0, 5))
 
         ttk.Button(button_frame, text="Remove Selected",
@@ -968,9 +974,9 @@ class TextFileMergerApp:
 
         ttk.Button(button_frame, text="Generate Output Files",
                   command=self.generate_outputs,
-                  style='Accent.TButton').pack(side=tk.LEFT, padx=(0, 5))
+                  style='Generate.TButton').pack(side=tk.LEFT, padx=(0, 5))
 
-        ttk.Button(button_frame, text="Clear All Folders",
+        ttk.Button(button_frame, text="Clear List",
                   command=self.clear_all_folders).pack(side=tk.LEFT)
 
         self.folder_count_label = ttk.Label(button_frame,
@@ -2123,8 +2129,10 @@ Displays all folders you've added with their output file names
   • Shows progress in Status Log
   • Displays token count and estimated AI cost
 
-"Clear All Folders" button: Removes all folders from the table
-  • Use this to start fresh
+"Clear List" button: Removes all folders from the table (does NOT delete actual folders)
+  • Only removes entries from the list display
+  • Does not delete any files or folders from your computer
+  • Use this to start fresh with a new set of folders
   • Asks for confirmation first
 
 ================================================================================
