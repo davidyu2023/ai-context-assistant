@@ -787,7 +787,7 @@ class AddFolderDialog:
         self.result = None
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(f"Add Source Folder {index + 1}")
-        self.dialog.geometry("550x250")
+        self.dialog.geometry("550x300")
         self.dialog.transient(parent)
         self.dialog.grab_set()
 
