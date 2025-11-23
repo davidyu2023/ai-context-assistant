@@ -780,48 +780,43 @@ class Config:
             return False
 
 
-class FolderEntry:
-    """Represents a single folder entry with its settings"""
+class AddFolderDialog:
+    """Dialog for adding a source folder"""
 
-    def __init__(self, parent_frame, index: int, on_remove_callback):
-        self.index = index
-        self.on_remove = on_remove_callback
-
-        # Create frame for this entry
-        self.frame = ttk.LabelFrame(parent_frame, text=f"Source Folder {index + 1}",
-                                    padding="10")
-        self.frame.pack(fill=tk.X, padx=5, pady=5)
+    def __init__(self, parent, index):
+        self.result = None
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title(f"Add Source Folder {index + 1}")
+        self.dialog.geometry("550x250")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
 
         # Folder path
-        path_frame = ttk.Frame(self.frame)
-        path_frame.pack(fill=tk.X, pady=(0, 5))
+        path_frame = ttk.Frame(self.dialog)
+        path_frame.pack(fill=tk.X, padx=20, pady=(20, 10))
 
         ttk.Label(path_frame, text="Folder:").pack(side=tk.LEFT)
         self.folder_path = tk.StringVar()
-        self.folder_entry = ttk.Entry(path_frame, textvariable=self.folder_path,
-                                      width=50, state='readonly')
-        self.folder_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-
+        ttk.Entry(path_frame, textvariable=self.folder_path,
+                 width=40, state='readonly').pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         ttk.Button(path_frame, text="Browse...",
                   command=self.browse_folder).pack(side=tk.LEFT)
 
-        # Options frame
-        options_frame = ttk.Frame(self.frame)
-        options_frame.pack(fill=tk.X, pady=(0, 5))
+        # Options
+        options_frame = ttk.LabelFrame(self.dialog, text="Options", padding="10")
+        options_frame.pack(fill=tk.X, padx=20, pady=10)
 
-        # Include subfolders checkbox
-        self.include_subfolders = tk.BooleanVar(value=False)
+        self.exclude_subfolders = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_frame, text="Exclude subfolders",
-                       variable=self.include_subfolders).pack(side=tk.LEFT, padx=(0, 15))
+                       variable=self.exclude_subfolders).pack(anchor=tk.W)
 
-        # Include archive folder checkbox
         self.include_archive = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_frame, text="Include archive folder",
-                       variable=self.include_archive).pack(side=tk.LEFT)
+                       variable=self.include_archive).pack(anchor=tk.W)
 
-        # Output filename
-        output_frame = ttk.Frame(self.frame)
-        output_frame.pack(fill=tk.X, pady=(0, 5))
+        # Output name
+        output_frame = ttk.Frame(self.dialog)
+        output_frame.pack(fill=tk.X, padx=20, pady=10)
 
         ttk.Label(output_frame, text="Output Name:").pack(side=tk.LEFT)
         self.output_name = tk.StringVar(value=f"merged_output_{index + 1}")
@@ -829,39 +824,55 @@ class FolderEntry:
                  width=30).pack(side=tk.LEFT, padx=5)
         ttk.Label(output_frame, text="(timestamp will be added)").pack(side=tk.LEFT)
 
-        # Remove button
-        ttk.Button(self.frame, text="Remove This Folder",
-                  command=self.remove).pack(pady=(5, 0))
+        # Buttons
+        button_frame = ttk.Frame(self.dialog)
+        button_frame.pack(fill=tk.X, padx=20, pady=20)
+
+        ttk.Button(button_frame, text="OK", command=self.ok,
+                  width=10).pack(side=tk.RIGHT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.cancel,
+                  width=10).pack(side=tk.RIGHT)
+
+        # Center dialog
+        self.dialog.update_idletasks()
+        x = (self.dialog.winfo_screenwidth() // 2) - (self.dialog.winfo_width() // 2)
+        y = (self.dialog.winfo_screenheight() // 2) - (self.dialog.winfo_height() // 2)
+        self.dialog.geometry(f"+{x}+{y}")
 
     def browse_folder(self):
         """Open folder selection dialog"""
-        folder = filedialog.askdirectory(title="Select Source Folder")
+        folder = filedialog.askdirectory(
+            title="Select Source Folder",
+            parent=self.dialog
+        )
         if folder:
             self.folder_path.set(folder)
 
-    def remove(self):
-        """Remove this folder entry"""
-        self.frame.destroy()
-        self.on_remove(self)
-
-    def get_config(self) -> Optional[Dict]:
-        """Get configuration for this folder entry"""
+    def ok(self):
+        """Handle OK button"""
         if not self.folder_path.get():
-            return None
+            messagebox.showwarning("No Folder",
+                                  "Please select a folder",
+                                  parent=self.dialog)
+            return
 
-        return {
+        self.result = {
             "folder_path": self.folder_path.get(),
-            "exclude_subfolders": self.include_subfolders.get(),
+            "exclude_subfolders": self.exclude_subfolders.get(),
             "include_archive": self.include_archive.get(),
             "output_name": self.output_name.get()
         }
+        self.dialog.destroy()
 
-    def set_config(self, config: Dict):
-        """Set configuration for this folder entry"""
-        self.folder_path.set(config.get("folder_path", ""))
-        self.include_subfolders.set(config.get("exclude_subfolders", False))
-        self.include_archive.set(config.get("include_archive", False))
-        self.output_name.set(config.get("output_name", f"merged_output_{self.index + 1}"))
+    def cancel(self):
+        """Handle Cancel button"""
+        self.result = None
+        self.dialog.destroy()
+
+    def show(self):
+        """Show dialog and return result"""
+        self.dialog.wait_window()
+        return self.result
 
 
 class TextFileMergerApp:
@@ -925,34 +936,35 @@ class TextFileMergerApp:
         ttk.Label(folders_frame, text="Source Folders:",
                  font=('', 9, 'bold')).pack(anchor=tk.W, pady=(5, 5))
 
-        # Canvas with scrollbar for folder entries
-        canvas_frame = ttk.Frame(folders_frame, height=200)
-        canvas_frame.pack(fill=tk.BOTH, expand=True)
-        canvas_frame.pack_propagate(False)  # Maintain fixed height
+        # Treeview for displaying folders
+        tree_frame = ttk.Frame(folders_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 5))
 
-        self.canvas = tk.Canvas(canvas_frame, height=200, bg='white')
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical",
-                                 command=self.canvas.yview)
-        self.scrollable_frame = ttk.Frame(self.canvas)
+        # Create Treeview
+        columns = ('folder', 'output_name')
+        self.folders_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=6)
+        self.folders_tree.heading('folder', text='Folder Path')
+        self.folders_tree.heading('output_name', text='Output File Name')
+        self.folders_tree.column('folder', width=400)
+        self.folders_tree.column('output_name', width=200)
 
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-        )
+        # Scrollbar for treeview
+        tree_scroll = ttk.Scrollbar(tree_frame, orient="vertical", command=self.folders_tree.yview)
+        self.folders_tree.configure(yscrollcommand=tree_scroll.set)
 
-        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        self.canvas.configure(yscrollcommand=scrollbar.set)
+        self.folders_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
-        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Add folder button
+        # Buttons
         button_frame = ttk.Frame(folders_frame)
         button_frame.pack(fill=tk.X, pady=(5, 5))
 
         self.add_folder_btn = ttk.Button(button_frame, text="Add Source Folder",
                                          command=self.add_folder_entry)
-        self.add_folder_btn.pack(side=tk.LEFT)
+        self.add_folder_btn.pack(side=tk.LEFT, padx=(0, 5))
+
+        ttk.Button(button_frame, text="Remove Selected",
+                  command=self.remove_selected_folder).pack(side=tk.LEFT)
 
         self.folder_count_label = ttk.Label(button_frame,
                                            text=f"Folders: 0/{self.MAX_FOLDERS}")
@@ -1237,37 +1249,53 @@ class TextFileMergerApp:
         for folder_config in saved_folders:
             if len(self.folder_entries) >= self.MAX_FOLDERS:
                 break
-            entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                              self.remove_folder_entry)
-            entry.set_config(folder_config)
-            self.folder_entries.append(entry)
+            self.folder_entries.append(folder_config)
+            self.folders_tree.insert('', 'end', values=(
+                folder_config.get('folder_path', ''),
+                folder_config.get('output_name', '')
+            ))
         self.update_folder_count()
         if saved_folders:
             self.log(f"Loaded {len(saved_folders)} saved source folder(s)")
 
     def add_folder_entry(self):
-        """Add a new folder entry"""
+        """Add a new folder entry using popup dialog"""
         if len(self.folder_entries) >= self.MAX_FOLDERS:
             messagebox.showwarning("Limit Reached",
                                   f"Maximum of {self.MAX_FOLDERS} folders allowed")
             return
 
-        entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                          self.remove_folder_entry)
-        self.folder_entries.append(entry)
-        self.update_folder_count()
-        self.log(f"Added folder entry {len(self.folder_entries)}")
+        # Show dialog
+        dialog = AddFolderDialog(self.root, len(self.folder_entries))
+        result = dialog.show()
 
-    def remove_folder_entry(self, entry: FolderEntry):
-        """Remove a folder entry"""
-        if entry in self.folder_entries:
-            self.folder_entries.remove(entry)
+        if result:
+            # Add to list and treeview
+            self.folder_entries.append(result)
+            self.folders_tree.insert('', 'end', values=(
+                result['folder_path'],
+                result['output_name']
+            ))
             self.update_folder_count()
-            # Reindex remaining entries
-            for i, e in enumerate(self.folder_entries):
-                e.index = i
-                e.frame.configure(text=f"Source Folder {i + 1}")
-            self.log(f"Removed folder entry")
+            self.log(f"Added folder: {result['folder_path']}")
+
+    def remove_selected_folder(self):
+        """Remove the selected folder from treeview"""
+        selection = self.folders_tree.selection()
+        if not selection:
+            messagebox.showinfo("No Selection", "Please select a folder to remove")
+            return
+
+        # Get index of selected item
+        item = selection[0]
+        index = self.folders_tree.index(item)
+
+        # Remove from treeview and list
+        self.folders_tree.delete(item)
+        if 0 <= index < len(self.folder_entries):
+            removed = self.folder_entries.pop(index)
+            self.update_folder_count()
+            self.log(f"Removed folder: {removed.get('folder_path', '')}")
 
     def clear_all_folders(self):
         """Clear all folder entries"""
@@ -1276,8 +1304,9 @@ class TextFileMergerApp:
 
         if messagebox.askyesno("Clear All",
                               "Are you sure you want to remove all folder entries?"):
-            for entry in self.folder_entries[:]:
-                entry.frame.destroy()
+            # Clear treeview
+            for item in self.folders_tree.get_children():
+                self.folders_tree.delete(item)
             self.folder_entries.clear()
             self.update_folder_count()
             self.log("All folder entries cleared")
@@ -1593,11 +1622,7 @@ class TextFileMergerApp:
             return
 
         # Get valid folder configurations
-        folder_configs = []
-        for entry in self.folder_entries:
-            config = entry.get_config()
-            if config:
-                folder_configs.append(config)
+        folder_configs = [entry for entry in self.folder_entries if entry.get('folder_path')]
 
         if not folder_configs:
             messagebox.showwarning("No Folders",
@@ -1781,16 +1806,17 @@ class TextFileMergerApp:
         self.system_prompt.insert('1.0', state.get("system_prompt", ""))
 
         # Clear and reload source folders
-        for entry in self.folder_entries[:]:
-            entry.frame.destroy()
+        for item in self.folders_tree.get_children():
+            self.folders_tree.delete(item)
         self.folder_entries.clear()
 
         for folder_config in state.get("source_folders", []):
             if len(self.folder_entries) < self.MAX_FOLDERS:
-                entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
-                                  self.remove_folder_entry)
-                entry.set_config(folder_config)
-                self.folder_entries.append(entry)
+                self.folder_entries.append(folder_config)
+                self.folders_tree.insert('', 'end', values=(
+                    folder_config.get('folder_path', ''),
+                    folder_config.get('output_name', '')
+                ))
 
         self.update_folder_count()
 
@@ -1958,11 +1984,7 @@ class TextFileMergerApp:
             return
 
         # Get valid folder configurations
-        folder_configs = []
-        for entry in self.folder_entries:
-            config = entry.get_config()
-            if config:
-                folder_configs.append(config)
+        folder_configs = [entry for entry in self.folder_entries if entry.get('folder_path')]
 
         if not folder_configs:
             messagebox.showwarning("No Folders", "Please configure at least one source folder")
