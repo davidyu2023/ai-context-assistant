@@ -7,10 +7,10 @@ echo ================================================
 echo.
 
 REM Check if PyInstaller is installed
-python -c "import PyInstaller" 2>nul
+py -c "import PyInstaller" 2>nul
 if errorlevel 1 (
     echo PyInstaller not found. Installing...
-    pip install pyinstaller
+    py -m pip install pyinstaller
     echo.
 )
 
@@ -18,7 +18,7 @@ echo Building executable...
 echo.
 
 REM Build the executable
-pyinstaller --onefile ^
+py -m PyInstaller --onefile ^
     --windowed ^
     --name "TextFileMerger" ^
     --icon=NONE ^
