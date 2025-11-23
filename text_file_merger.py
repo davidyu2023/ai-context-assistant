@@ -44,7 +44,8 @@ class Config:
         """Return default configuration"""
         return {
             "output_folder": "",
-            "file_extensions": ".txt, .py, .md, .json, .xml, .csv"
+            "file_extensions": ".txt, .py, .md, .json, .xml, .csv",
+            "source_folders": []
         }
 
     def get(self, key: str, default=None):
@@ -89,7 +90,12 @@ class FolderEntry:
         # Include subfolders checkbox
         self.include_subfolders = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_frame, text="Exclude subfolders",
-                       variable=self.include_subfolders).pack(side=tk.LEFT)
+                       variable=self.include_subfolders).pack(side=tk.LEFT, padx=(0, 15))
+
+        # Include archive folder checkbox
+        self.include_archive = tk.BooleanVar(value=False)
+        ttk.Checkbutton(options_frame, text="Include archive folder",
+                       variable=self.include_archive).pack(side=tk.LEFT)
 
         # Output filename
         output_frame = ttk.Frame(self.frame)
@@ -124,8 +130,16 @@ class FolderEntry:
         return {
             "folder_path": self.folder_path.get(),
             "exclude_subfolders": self.include_subfolders.get(),
+            "include_archive": self.include_archive.get(),
             "output_name": self.output_name.get()
         }
+
+    def set_config(self, config: Dict):
+        """Set configuration for this folder entry"""
+        self.folder_path.set(config.get("folder_path", ""))
+        self.include_subfolders.set(config.get("exclude_subfolders", False))
+        self.include_archive.set(config.get("include_archive", False))
+        self.output_name.set(config.get("output_name", f"merged_output_{self.index + 1}"))
 
 
 class TextFileMergerApp:
@@ -146,6 +160,9 @@ class TextFileMergerApp:
 
         # Setup GUI
         self.setup_gui()
+
+        # Load saved source folders
+        self.load_source_folders()
 
     def setup_gui(self):
         """Setup the GUI components"""
@@ -253,8 +270,32 @@ class TextFileMergerApp:
         """Save current settings to config"""
         self.config.set("output_folder", self.output_folder.get())
         self.config.set("file_extensions", self.file_extensions.get())
+        self.save_source_folders()
         self.log("Settings saved successfully")
         messagebox.showinfo("Settings", "Settings saved successfully!")
+
+    def save_source_folders(self):
+        """Save current source folder configurations to config"""
+        folder_configs = []
+        for entry in self.folder_entries:
+            config = entry.get_config()
+            if config:
+                folder_configs.append(config)
+        self.config.set("source_folders", folder_configs)
+
+    def load_source_folders(self):
+        """Load saved source folder configurations from config"""
+        saved_folders = self.config.get("source_folders", [])
+        for folder_config in saved_folders:
+            if len(self.folder_entries) >= self.MAX_FOLDERS:
+                break
+            entry = FolderEntry(self.scrollable_frame, len(self.folder_entries),
+                              self.remove_folder_entry)
+            entry.set_config(folder_config)
+            self.folder_entries.append(entry)
+        self.update_folder_count()
+        if saved_folders:
+            self.log(f"Loaded {len(saved_folders)} saved source folder(s)")
 
     def add_folder_entry(self):
         """Add a new folder entry"""
@@ -316,8 +357,16 @@ class TextFileMergerApp:
         # Ensure extensions start with a dot
         return [ext if ext.startswith('.') else f'.{ext}' for ext in extensions if ext]
 
+    def _is_in_archive_folder(self, file_path: Path) -> bool:
+        """Check if a file is within an archive folder"""
+        # Check if any parent directory is named 'archive' or 'archived'
+        for parent in file_path.parents:
+            if parent.name.lower() in ['archive', 'archived', 'archives']:
+                return True
+        return False
+
     def collect_files(self, folder_path: str, exclude_subfolders: bool,
-                     extensions: List[str]) -> List[Path]:
+                     extensions: List[str], include_archive: bool = False) -> List[Path]:
         """Collect all files from folder matching extensions"""
         files = []
         folder = Path(folder_path)
@@ -331,6 +380,10 @@ class TextFileMergerApp:
             # Recursively get all files
             for ext in extensions:
                 files.extend(folder.rglob(f"*{ext}"))
+
+        # Filter out archive folders unless include_archive is True
+        if not include_archive:
+            files = [f for f in files if not self._is_in_archive_folder(f)]
 
         return sorted(files)
 
@@ -415,13 +468,15 @@ class TextFileMergerApp:
         for i, config in enumerate(folder_configs, 1):
             folder_path = config['folder_path']
             exclude_subfolders = config['exclude_subfolders']
+            include_archive = config.get('include_archive', False)
             output_name = config['output_name']
 
             self.log(f"\n[{i}/{len(folder_configs)}] Processing: {folder_path}")
             self.log(f"  Exclude subfolders: {exclude_subfolders}")
+            self.log(f"  Include archive folder: {include_archive}")
 
             # Collect files
-            files = self.collect_files(folder_path, exclude_subfolders, extensions)
+            files = self.collect_files(folder_path, exclude_subfolders, extensions, include_archive)
 
             if not files:
                 self.log(f"  Warning: No matching files found")
@@ -444,6 +499,9 @@ class TextFileMergerApp:
         self.log("="*60)
         self.log(f"Process complete: {success_count}/{len(folder_configs)} successful")
         self.log("="*60)
+
+        # Save source folders for next time
+        self.save_source_folders()
 
         messagebox.showinfo("Complete",
                           f"Generated {success_count} output file(s)\n"
