@@ -1245,6 +1245,11 @@ class TextFileMergerApp:
         if saved_folders:
             self.log(f"Loaded {len(saved_folders)} saved source folder(s)")
 
+        # Update canvas to show loaded entries
+        if saved_folders:
+            self.scrollable_frame.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def add_folder_entry(self):
         """Add a new folder entry"""
         if len(self.folder_entries) >= self.MAX_FOLDERS:
@@ -1258,6 +1263,10 @@ class TextFileMergerApp:
         self.update_folder_count()
         self.log(f"Added folder entry {len(self.folder_entries)}")
 
+        # Update canvas to show new entry
+        self.scrollable_frame.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def remove_folder_entry(self, entry: FolderEntry):
         """Remove a folder entry"""
         if entry in self.folder_entries:
@@ -1268,6 +1277,10 @@ class TextFileMergerApp:
                 e.index = i
                 e.frame.configure(text=f"Source Folder {i + 1}")
             self.log(f"Removed folder entry")
+
+            # Update canvas after removing entry
+            self.scrollable_frame.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def clear_all_folders(self):
         """Clear all folder entries"""
@@ -1793,6 +1806,11 @@ class TextFileMergerApp:
                 self.folder_entries.append(entry)
 
         self.update_folder_count()
+
+        # Update canvas to show loaded entries
+        if state.get("source_folders"):
+            self.scrollable_frame.update_idletasks()
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def save_profile_action(self):
         """Save current state as a new profile"""
