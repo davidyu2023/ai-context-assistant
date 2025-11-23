@@ -786,36 +786,38 @@ class FolderEntry:
     def __init__(self, parent_frame, index: int, on_remove_callback):
         self.index = index
         self.on_remove = on_remove_callback
+        self.folder_path = tk.StringVar()
+        self.include_subfolders = tk.BooleanVar(value=False)
+        self.include_archive = tk.BooleanVar(value=False)
+        self.output_name = tk.StringVar(value=f"merged_output_{index + 1}")
 
         # Create frame for this entry
         self.frame = ttk.LabelFrame(parent_frame, text=f"Source Folder {index + 1}",
                                     padding="10")
         self.frame.pack(fill=tk.X, padx=5, pady=5)
 
-        # Folder path
+        # Folder path row
         path_frame = ttk.Frame(self.frame)
         path_frame.pack(fill=tk.X, pady=(0, 5))
 
         ttk.Label(path_frame, text="Folder:").pack(side=tk.LEFT)
-        self.folder_path = tk.StringVar()
+
         self.folder_entry = ttk.Entry(path_frame, textvariable=self.folder_path,
                                       width=50, state='readonly')
         self.folder_entry.pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
 
-        ttk.Button(path_frame, text="Browse...",
-                  command=self.browse_folder).pack(side=tk.LEFT)
+        # Browse button - use lambda to ensure it's not called on creation
+        browse_btn = ttk.Button(path_frame, text="Browse...")
+        browse_btn.configure(command=lambda: self._select_folder())
+        browse_btn.pack(side=tk.LEFT)
 
         # Options frame
         options_frame = ttk.Frame(self.frame)
         options_frame.pack(fill=tk.X, pady=(0, 5))
 
-        # Include subfolders checkbox
-        self.include_subfolders = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_frame, text="Exclude subfolders",
                        variable=self.include_subfolders).pack(side=tk.LEFT, padx=(0, 15))
 
-        # Include archive folder checkbox
-        self.include_archive = tk.BooleanVar(value=False)
         ttk.Checkbutton(options_frame, text="Include archive folder",
                        variable=self.include_archive).pack(side=tk.LEFT)
 
@@ -824,20 +826,26 @@ class FolderEntry:
         output_frame.pack(fill=tk.X, pady=(0, 5))
 
         ttk.Label(output_frame, text="Output Name:").pack(side=tk.LEFT)
-        self.output_name = tk.StringVar(value=f"merged_output_{index + 1}")
         ttk.Entry(output_frame, textvariable=self.output_name,
                  width=30).pack(side=tk.LEFT, padx=5)
         ttk.Label(output_frame, text="(timestamp will be added)").pack(side=tk.LEFT)
 
         # Remove button
-        ttk.Button(self.frame, text="Remove This Folder",
-                  command=self.remove).pack(pady=(5, 0))
+        remove_btn = ttk.Button(self.frame, text="Remove This Folder")
+        remove_btn.configure(command=lambda: self.remove())
+        remove_btn.pack(pady=(5, 0))
 
-    def browse_folder(self):
-        """Open folder selection dialog"""
-        folder = filedialog.askdirectory(title="Select Source Folder")
-        if folder:
-            self.folder_path.set(folder)
+    def _select_folder(self):
+        """Private method to open folder selection dialog"""
+        try:
+            result = filedialog.askdirectory(
+                title="Select Source Folder",
+                mustexist=True
+            )
+            if result:
+                self.folder_path.set(result)
+        except Exception as e:
+            print(f"Error selecting folder: {e}")
 
     def remove(self):
         """Remove this folder entry"""
